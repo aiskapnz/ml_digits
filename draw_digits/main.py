@@ -1,9 +1,22 @@
 import cairo
 import gi
+from joblib import load
 from PIL import Image
+from sklearn import svm
 
 gi.require_version("Gtk", "4.0")
 from gi.repository import GdkPixbuf, GLib, Gtk
+
+
+def get_clf() -> svm.SVC:
+    import os
+
+    model_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "models",
+        "sk_learn_digits.joblib",
+    )
+    return load(model_file)
 
 
 class DrawingAreaWindow(Gtk.ApplicationWindow):
@@ -12,6 +25,8 @@ class DrawingAreaWindow(Gtk.ApplicationWindow):
         self.set_title("Drawing Area")
         self.set_default_size(800, 600)
         self.set_resizable(True)
+
+        self._clf = get_clf()
 
         self._surface: cairo.ImageSurface | None = None
         self._last_point: tuple[float, float] | None = None
@@ -41,6 +56,9 @@ class DrawingAreaWindow(Gtk.ApplicationWindow):
         self._clear_button.connect("clicked", self._on_clear)
         self._root_box.append(self._clear_button)
 
+        self._predict_label = Gtk.Label()
+        self._root_box.append(self._predict_label)
+
         self.set_child(self._root_box)
 
         drag = Gtk.GestureDrag()
@@ -62,6 +80,7 @@ class DrawingAreaWindow(Gtk.ApplicationWindow):
         context.paint()
         self._surface.flush()
         self._drawing_area.queue_draw()
+        self._predict_label.set_label("")
 
     def _on_resize(self, _area: Gtk.DrawingArea, width: int, height: int) -> None:
         if width <= 0 or height <= 0:
@@ -69,19 +88,13 @@ class DrawingAreaWindow(Gtk.ApplicationWindow):
 
         self._surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
         self.clear()
-        # context = cairo.Context(new_surface)
-        # context.set_source_rgb(1.0, 1.0, 1.0)
-        # context.paint()
-        # new_surface.flush()
-
-        # self._surface = new_surface
 
     def _on_draw(
         self,
         _area: Gtk.DrawingArea,
         context: cairo.Context,
-        width: int,
-        height: int,
+        _width: int,
+        _height: int,
     ) -> None:
         if self._surface is None:
             return
@@ -89,25 +102,31 @@ class DrawingAreaWindow(Gtk.ApplicationWindow):
         context.set_source_surface(self._surface, 0, 0)
         context.paint()
 
-        # convert image to 8*8
-        w = self._surface.get_width()
-        h = self._surface.get_height()
-        data = bytes(self._surface.get_data())
-        image_8x8 = resize_to_8x8(w, h, data)
+        self.predict_digit()
 
-        # display image 8*8
-        w, h = image_8x8.size
-        pixbuf = GdkPixbuf.Pixbuf.new_from_bytes(
-            GLib.Bytes.new(image_8x8.tobytes()),
-            GdkPixbuf.Colorspace.RGB,
-            True,
-            8,
-            w,
-            h,
-            w * 4,
-        )
-        pixbuf = pixbuf.scale_simple(100, 100, GdkPixbuf.InterpType.TILES)
-        self._resized_image.set_from_pixbuf(pixbuf)
+    def predict_digit(self):
+        if self._surface is None:
+            return
+
+        # convert image to 8*8
+        width = self._surface.get_width()
+        height = self._surface.get_height()
+        data = bytes(self._surface.get_data())
+        image_8x8 = resize_to_8x8(data, width, height)
+
+        # preview
+        self._resized_image.set_from_pixbuf(preview_pixbuf(image_8x8))
+
+        # to grayscale
+        grayscale_image_8x8 = image_8x8.convert("L")
+        # convert image data for svm.SCV
+        floats = [(~b & 0xFF) // 16.0 for b in grayscale_image_8x8.tobytes()]
+
+        if not all(f == 0 for f in floats):
+            predicted_digit = self._clf.predict([floats])
+            self._predict_label.set_label(f"Predict: {predicted_digit}")
+        else:
+            self._predict_label.set_label("")
 
     def _draw_line(self, x: float, y: float) -> None:
         if self._surface is None:
@@ -158,10 +177,24 @@ class DrawingApp(Gtk.Application):
         window.present()
 
 
-def resize_to_8x8(w, h, data):
+def resize_to_8x8(data: bytes, width: int, height: int) -> Image.Image:
     # L = 8-bit grayscale (A8)
-    pil = Image.frombytes("RGBA", (w, h), data)
+    pil = Image.frombytes("RGBA", (width, height), data)
     return pil.resize((8, 8), Image.Resampling.LANCZOS)
+
+
+def preview_pixbuf(image: Image.Image) -> GdkPixbuf.Pixbuf | None:
+    pixbuf = GdkPixbuf.Pixbuf.new_from_bytes(
+        GLib.Bytes.new(image.tobytes()),
+        GdkPixbuf.Colorspace.RGB,
+        True,
+        8,
+        image.width,
+        image.height,
+        image.width * 4,
+    )
+    # todo: scale width, height as args
+    return pixbuf.scale_simple(100, 100, GdkPixbuf.InterpType.TILES)
 
 
 def main() -> None:
