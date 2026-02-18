@@ -1,0 +1,62 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Packaging/build
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Logs and caches
+*.log
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.cache/
+.ipynb_checkpoints/
+
+# Jupyter
+*.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.swn
+.idea/
+.vscode/
+
+# UV
+.uv/
+uv.lock
+
+# Model artifacts / outputs
+models/
+*.pt
+*.pth
+*.h5
+*.pkl
+*.joblib
+*.onnx
+*.tflite
+*.npz
+*.npy
+*.ckpt
+
+# Data / exports (adjust if you want to track data)
+data/
+outputs/
+runs/
+checkpoints/
+logs/
