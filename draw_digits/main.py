@@ -45,10 +45,10 @@ class DrawingAreaWindow(Gtk.ApplicationWindow):
         self._drawing_area.set_halign(Gtk.Align.CENTER)
         self._root_box.append(self._drawing_area)
 
-        self._resized_image = Gtk.Image()
-        self._resized_image.set_size_request(100, 100)
-        self._resized_image.set_pixel_size(100)
-        self._root_box.append(self._resized_image)
+        self._preview_image = Gtk.Image()
+        self._preview_image.set_size_request(100, 100)
+        self._preview_image.set_pixel_size(100)
+        self._root_box.append(self._preview_image)
 
         self._clear_button = Gtk.Button()
         self._clear_button.set_label("Clear")
@@ -56,8 +56,8 @@ class DrawingAreaWindow(Gtk.ApplicationWindow):
         self._clear_button.connect("clicked", self._on_clear)
         self._root_box.append(self._clear_button)
 
-        self._predict_label = Gtk.Label()
-        self._root_box.append(self._predict_label)
+        self._predicted_label = Gtk.Label()
+        self._root_box.append(self._predicted_label)
 
         self.set_child(self._root_box)
 
@@ -68,8 +68,8 @@ class DrawingAreaWindow(Gtk.ApplicationWindow):
         drag.connect("drag-end", self._on_drag_end)
         self._drawing_area.add_controller(drag)
 
-    def _on_clear(self, user_data):
-        self.clear()
+        self.set_predicted_digit(None)
+        self._prediction_pending = False
 
     def clear(self):
         if self._surface is None:
@@ -80,53 +80,56 @@ class DrawingAreaWindow(Gtk.ApplicationWindow):
         context.paint()
         self._surface.flush()
         self._drawing_area.queue_draw()
-        self._predict_label.set_label("")
 
-    def _on_resize(self, _area: Gtk.DrawingArea, width: int, height: int) -> None:
-        if width <= 0 or height <= 0:
-            return
+        # to clear predicted label
+        self.update_prediction()
 
-        self._surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
-        self.clear()
-
-    def _on_draw(
-        self,
-        _area: Gtk.DrawingArea,
-        context: cairo.Context,
-        _width: int,
-        _height: int,
-    ) -> None:
+    def get_image_8x8(self) -> Image.Image | None:
         if self._surface is None:
             return
 
-        context.set_source_surface(self._surface, 0, 0)
-        context.paint()
-
-        self.predict_digit()
-
-    def predict_digit(self):
-        if self._surface is None:
-            return
-
-        # convert image to 8*8
         width = self._surface.get_width()
         height = self._surface.get_height()
         data = bytes(self._surface.get_data())
-        image_8x8 = resize_to_8x8(data, width, height)
+        return resize_to_8x8(data, width, height)
 
-        # preview
-        self._resized_image.set_from_pixbuf(preview_pixbuf(image_8x8))
+    def update_prediction(self):
+        def _update_prediction():
+            image_8x8 = self.get_image_8x8()
+            if image_8x8 is None:
+                return
 
-        # to grayscale
-        grayscale_image_8x8 = image_8x8.convert("L")
-        # convert image data for svm.SCV
-        floats = [(~b & 0xFF) // 16.0 for b in grayscale_image_8x8.tobytes()]
+            self.update_preview_image(image_8x8)
 
-        if not all(f == 0 for f in floats):
-            predicted_digit = self._clf.predict([floats])
-            self._predict_label.set_label(f"Predict: {predicted_digit}")
-        else:
-            self._predict_label.set_label("")
+            # to grayscale
+            grayscale_image_8x8 = image_8x8.convert("L")
+
+            # convert image data for svm.SCV
+            floats = [(~b & 0xFF) // 16.0 for b in grayscale_image_8x8.tobytes()]
+
+            if not all(f == 0 for f in floats):
+                predicted_digit = self._clf.predict([floats])
+                self.set_predicted_digit(predicted_digit[0])
+            else:
+                self.set_predicted_digit(None)
+
+            self._prediction_pending = False
+
+        if not self._prediction_pending:
+            self._prediction_pending = True
+            GLib.idle_add(_update_prediction)
+
+    def update_preview_image(self, image: Image.Image):
+        self._preview_image.set_from_pixbuf(preview_pixbuf(image))
+
+    def set_predicted_digit(self, predicted_digit: int | None):
+        label = (
+            "draw a digit..."
+            if predicted_digit is None
+            else f"Predicted digit: {predicted_digit}"
+        )
+
+        self._predicted_label.set_label(label)
 
     def _draw_line(self, x: float, y: float) -> None:
         if self._surface is None:
@@ -159,11 +162,35 @@ class DrawingAreaWindow(Gtk.ApplicationWindow):
         _has_offset, offset_x, offset_y = gesture.get_offset()
         self._draw_line(start_x + offset_x, start_y + offset_y)
         self._drawing_area.queue_draw()
+        self.update_prediction()
 
     def _on_drag_end(
         self, _gesture: Gtk.GestureDrag, _offset_x: float, _offset_y: float
     ) -> None:
         self._last_point = None
+
+    def _on_clear(self, user_data):
+        self.clear()
+
+    def _on_resize(self, _area: Gtk.DrawingArea, width: int, height: int) -> None:
+        if width <= 0 or height <= 0:
+            return
+
+        self._surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
+        self.clear()
+
+    def _on_draw(
+        self,
+        _area: Gtk.DrawingArea,
+        context: cairo.Context,
+        _width: int,
+        _height: int,
+    ) -> None:
+        if self._surface is None:
+            return
+
+        context.set_source_surface(self._surface, 0, 0)
+        context.paint()
 
 
 class DrawingApp(Gtk.Application):
