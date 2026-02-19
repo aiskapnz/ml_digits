@@ -15,6 +15,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import sys
+
 import cairo
 import gi
 from joblib import load
@@ -222,7 +224,7 @@ def preview_pixbuf(image: Image.Image) -> GdkPixbuf.Pixbuf | None:
 
 def main() -> None:
     app = DrawingApp()
-    app.run()
+    app.run(sys.argv)
 
 
 if __name__ == "__main__":
