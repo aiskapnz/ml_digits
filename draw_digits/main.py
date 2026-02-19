@@ -15,6 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import os
 import sys
 
 import cairo
@@ -27,21 +28,28 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import (  # type: ignore[import-not-found]  # noqa: E402
     Adw,  # pyright: ignore[reportMissingModuleSource]
+    Gdk,  # pyright: ignore[reportMissingModuleSource]
     GdkPixbuf,  # pyright: ignore[reportMissingModuleSource]
     GLib,  # pyright: ignore[reportMissingModuleSource]
     Gtk,  # pyright: ignore[reportMissingModuleSource]
 )
 
 
-def get_clf() -> svm.SVC:
-    import os
-
-    model_file = os.path.join(
+def to_full_path(path: str) -> str:
+    return os.path.join(
         os.path.dirname(os.path.abspath(__file__)),
-        "models",
-        "sk_learn_digits.joblib",
+        path,
     )
+
+
+def get_clf() -> svm.SVC:
+    model_file = to_full_path("models/sk_learn_digits.joblib")
     return load(model_file)
+
+
+def get_drawing_cursor() -> Gdk.Cursor:
+    texture = Gdk.Texture.new_from_filename(to_full_path("res/pencil-symbolic.png"))
+    return Gdk.Cursor.new_from_texture(texture, 0, 31)
 
 
 @Gtk.Template(filename="main_window.ui")
@@ -64,6 +72,7 @@ class DrawingAreaWindow(Adw.ApplicationWindow):
 
         self.drawing_area.set_draw_func(self._on_draw)
         self.drawing_area.connect("resize", self._on_resize)
+        self.drawing_area.set_cursor(get_drawing_cursor())
 
         self.clear_button.connect("clicked", self._on_clear)
 
