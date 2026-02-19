@@ -185,6 +185,7 @@ class DrawingAreaWindow(Gtk.ApplicationWindow):
         self, _gesture: Gtk.GestureDrag, _offset_x: float, _offset_y: float
     ) -> None:
         self._last_point = None
+        self.update_prediction()
 
     def _on_clear(self, user_data):
         self.clear()
