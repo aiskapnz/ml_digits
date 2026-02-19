@@ -2,7 +2,7 @@ using Gtk 4.0;
 using Adw 1;
 
 template $DrawingAreaWindow: Adw.ApplicationWindow {
-  title: _("Draw digits");
+  title: _("Recognizing hand-written digits");
   default-width: 800;
   default-height: 600;
   resizable: true;
@@ -12,98 +12,130 @@ template $DrawingAreaWindow: Adw.ApplicationWindow {
 
     Adw.HeaderBar {}
 
-    Box root_box {
-      orientation: horizontal;
-      halign: center;
-      margin-top: 20;
-      margin-bottom: 20;
-      margin-start: 20;
-      margin-end: 20;
-      spacing: 24;
+    Adw.Bin {
+      vexpand: true;
 
-      Box {
-        orientation: vertical;
+      Box root_box {
+        orientation: horizontal;
+        halign: center;
+        valign: center;
+        margin-top: 20;
+        margin-bottom: 20;
+        margin-start: 20;
+        margin-end: 20;
+        spacing: 24;
 
-        Label input_label {
-          label: _("Draw any digit");
-          halign: start;
-          margin-bottom: 6;
+        Box {
+          orientation: vertical;
+          spacing: 12;
 
-          styles [
-            "heading",
-          ]
-        }
+          Label input_label {
+            label: _("Draw a digit");
+            halign: start;
+            selectable: true;
 
-        Adw.Bin {
-          margin-bottom: 12;
+            styles [
+              "title-3",
+            ]
+          }
 
-          styles [
-            "card",
-          ]
+          Adw.Bin {
+            styles [
+              "card",
+            ]
 
-          Frame {
-            DrawingArea drawing_area {
-              width-request: 200;
-              height-request: 200;
-              halign: center;
+            Frame {
+              DrawingArea drawing_area {
+                width-request: 200;
+                height-request: 200;
+                halign: center;
+              }
             }
+          }
+
+          Button clear_button {
+            label: _("Clear");
+            halign: fill;
           }
         }
 
-        Button clear_button {
-          label: _("Clear");
-          halign: fill;
-          margin-bottom: 12;
-        }
-      }
+        Separator {}
 
-      Separator {}
+        Adw.Clamp {
+          maximum-size: 300;
 
-      Box {
-        orientation: vertical;
-        // spacing: 12;
-        Label {
-          label: _("Scikit-learn");
-          halign: start;
-          margin-bottom: 6;
+          Box {
+            orientation: vertical;
+            spacing: 12;
+            width-request: 300;
 
-          styles [
-            "heading",
-          ]
-        }
+            Label {
+              label: _("Scikit-learn");
+              halign: start;
+              selectable: true;
 
-        Adw.Bin {
-          margin-bottom: 12;
+              styles [
+                "title-3",
+              ]
+            }
 
-          styles [
-            "card",
-          ]
+            Label {
+              label: _("A support vector classifier (SVC) has trained on 8x8 4-bit grayscale images dataset (from the sklearn.datasets).");
+              halign: fill;
+              wrap: true;
+              wrap-mode: word;
+              selectable: true;
+              justify: fill;
 
-          Frame {
-            Image preview_image {
-              width-request: 100;
-              height-request: 100;
-              pixel-size: 100;
+              styles [
+                "dimmed",
+              ]
+            }
+
+            Box {
+              orientation: horizontal;
+              spacing: 12;
+
+              Adw.Bin {
+                halign: start;
+
+                styles [
+                  "card",
+                ]
+
+                Frame {
+                  Image preview_image {
+                    width-request: 100;
+                    height-request: 100;
+                    pixel-size: 100;
+                  }
+                }
+              }
+
+              Box {
+                orientation: vertical;
+
+                Label {
+                  label: _("Prediction");
+                  halign: start;
+                  selectable: true;
+
+                  styles [
+                    "heading",
+                  ]
+                }
+
+                Label predicted_label {
+                  halign: start;
+                  selectable: true;
+
+                  styles [
+                    "title-1",
+                  ]
+                }
+              }
             }
           }
-        }
-
-        Label {
-          label: _("Prediction");
-          halign: start;
-
-          styles [
-            "caption-heading",
-          ]
-        }
-
-        Label predicted_label {
-          halign: start;
-          margin-bottom: 12;
-
-          styles [
-            "title-1",
-          ]
         }
       }
     }
