@@ -25,7 +25,12 @@ from sklearn import svm
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, GdkPixbuf, GLib, Gtk
+from gi.repository import (  # type: ignore[import-not-found]  # noqa: E402
+    Adw,  # pyright: ignore[reportMissingModuleSource]
+    GdkPixbuf,  # pyright: ignore[reportMissingModuleSource]
+    GLib,  # pyright: ignore[reportMissingModuleSource]
+    Gtk,  # pyright: ignore[reportMissingModuleSource]
+)
 
 
 def get_clf() -> svm.SVC:
