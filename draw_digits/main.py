@@ -22,7 +22,8 @@ from PIL import Image
 from sklearn import svm
 
 gi.require_version("Gtk", "4.0")
-from gi.repository import GdkPixbuf, GLib, Gtk
+gi.require_version("Adw", "1")
+from gi.repository import Adw, GdkPixbuf, GLib, Gtk
 
 
 def get_clf() -> svm.SVC:
@@ -36,54 +37,35 @@ def get_clf() -> svm.SVC:
     return load(model_file)
 
 
-class DrawingAreaWindow(Gtk.ApplicationWindow):
+@Gtk.Template(filename="main_window.ui")
+class DrawingAreaWindow(Adw.ApplicationWindow):
+    __gtype_name__ = "DrawingAreaWindow"
+    root_box: Gtk.Box = Gtk.Template.Child()
+    input_label: Gtk.Label = Gtk.Template.Child()
+    drawing_area: Gtk.DrawingArea = Gtk.Template.Child()
+    preview_image: Gtk.Image = Gtk.Template.Child()
+    clear_button: Gtk.Button = Gtk.Template.Child()
+    predicted_label: Gtk.Label = Gtk.Template.Child()
+
     def __init__(self, app: Gtk.Application) -> None:
         super().__init__(application=app)
-        self.set_title("Drawing Area")
-        self.set_default_size(800, 600)
-        self.set_resizable(True)
 
         self._clf = get_clf()
 
         self._surface: cairo.ImageSurface | None = None
         self._last_point: tuple[float, float] | None = None
 
-        self._root_box = Gtk.Box()
-        self._root_box.set_orientation(Gtk.Orientation.VERTICAL)
-        self._root_box.set_property("spacing", 12)
+        self.drawing_area.set_draw_func(self._on_draw)
+        self.drawing_area.connect("resize", self._on_resize)
 
-        self._input_label = Gtk.Label(label="Draw any digit (0-9):")
-        self._root_box.append(self._input_label)
-
-        self._drawing_area = Gtk.DrawingArea()
-        self._drawing_area.set_size_request(200, 200)
-        self._drawing_area.set_draw_func(self._on_draw)
-        self._drawing_area.connect("resize", self._on_resize)
-        self._drawing_area.set_halign(Gtk.Align.CENTER)
-        self._root_box.append(self._drawing_area)
-
-        self._preview_image = Gtk.Image()
-        self._preview_image.set_size_request(100, 100)
-        self._preview_image.set_pixel_size(100)
-        self._root_box.append(self._preview_image)
-
-        self._clear_button = Gtk.Button()
-        self._clear_button.set_label("Clear")
-        self._clear_button.set_halign(Gtk.Align.CENTER)
-        self._clear_button.connect("clicked", self._on_clear)
-        self._root_box.append(self._clear_button)
-
-        self._predicted_label = Gtk.Label()
-        self._root_box.append(self._predicted_label)
-
-        self.set_child(self._root_box)
+        self.clear_button.connect("clicked", self._on_clear)
 
         drag = Gtk.GestureDrag()
         drag.set_button(1)
         drag.connect("drag-begin", self._on_drag_begin)
         drag.connect("drag-update", self._on_drag_update)
         drag.connect("drag-end", self._on_drag_end)
-        self._drawing_area.add_controller(drag)
+        self.drawing_area.add_controller(drag)
 
         self.set_predicted_digit(None)
         self._prediction_pending = False
@@ -96,7 +78,7 @@ class DrawingAreaWindow(Gtk.ApplicationWindow):
         context.set_source_rgb(1.0, 1.0, 1.0)
         context.paint()
         self._surface.flush()
-        self._drawing_area.queue_draw()
+        self.drawing_area.queue_draw()
 
         # to clear predicted label
         self.update_prediction()
@@ -137,16 +119,12 @@ class DrawingAreaWindow(Gtk.ApplicationWindow):
             GLib.idle_add(_update_prediction)
 
     def update_preview_image(self, image: Image.Image):
-        self._preview_image.set_from_pixbuf(preview_pixbuf(image))
+        self.preview_image.set_from_pixbuf(preview_pixbuf(image))
 
     def set_predicted_digit(self, predicted_digit: int | None):
-        label = (
-            "draw a digit..."
-            if predicted_digit is None
-            else f"Predicted digit: {predicted_digit}"
-        )
+        label = "..." if predicted_digit is None else f"{predicted_digit}"
 
-        self._predicted_label.set_label(label)
+        self.predicted_label.set_label(label)
 
     def _draw_line(self, x: float, y: float) -> None:
         if self._surface is None:
@@ -170,7 +148,7 @@ class DrawingAreaWindow(Gtk.ApplicationWindow):
     ) -> None:
         self._last_point = (start_x, start_y)
         self._draw_line(start_x, start_y)
-        self._drawing_area.queue_draw()
+        self.drawing_area.queue_draw()
 
     def _on_drag_update(
         self, gesture: Gtk.GestureDrag, _offset_x: float, _offset_y: float
@@ -178,7 +156,7 @@ class DrawingAreaWindow(Gtk.ApplicationWindow):
         _has_start, start_x, start_y = gesture.get_start_point()
         _has_offset, offset_x, offset_y = gesture.get_offset()
         self._draw_line(start_x + offset_x, start_y + offset_y)
-        self._drawing_area.queue_draw()
+        self.drawing_area.queue_draw()
         self.update_prediction()
 
     def _on_drag_end(
@@ -211,7 +189,7 @@ class DrawingAreaWindow(Gtk.ApplicationWindow):
         context.paint()
 
 
-class DrawingApp(Gtk.Application):
+class DrawingApp(Adw.Application):
     def __init__(self) -> None:
         super().__init__(application_id="com.example.DrawingApp")
 

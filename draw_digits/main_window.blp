@@ -1,0 +1,111 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $DrawingAreaWindow: Adw.ApplicationWindow {
+  title: _("Draw digits");
+  default-width: 800;
+  default-height: 600;
+  resizable: true;
+
+  Box {
+    orientation: vertical;
+
+    Adw.HeaderBar {}
+
+    Box root_box {
+      orientation: horizontal;
+      halign: center;
+      margin-top: 20;
+      margin-bottom: 20;
+      margin-start: 20;
+      margin-end: 20;
+      spacing: 24;
+
+      Box {
+        orientation: vertical;
+
+        Label input_label {
+          label: _("Draw any digit");
+          halign: start;
+          margin-bottom: 6;
+
+          styles [
+            "heading",
+          ]
+        }
+
+        Adw.Bin {
+          margin-bottom: 12;
+
+          styles [
+            "card",
+          ]
+
+          Frame {
+            DrawingArea drawing_area {
+              width-request: 200;
+              height-request: 200;
+              halign: center;
+            }
+          }
+        }
+
+        Button clear_button {
+          label: _("Clear");
+          halign: fill;
+          margin-bottom: 12;
+        }
+      }
+
+      Separator {}
+
+      Box {
+        orientation: vertical;
+        // spacing: 12;
+        Label {
+          label: _("Scikit-learn");
+          halign: start;
+          margin-bottom: 6;
+
+          styles [
+            "heading",
+          ]
+        }
+
+        Adw.Bin {
+          margin-bottom: 12;
+
+          styles [
+            "card",
+          ]
+
+          Frame {
+            Image preview_image {
+              width-request: 100;
+              height-request: 100;
+              pixel-size: 100;
+            }
+          }
+        }
+
+        Label {
+          label: _("Prediction");
+          halign: start;
+
+          styles [
+            "caption-heading",
+          ]
+        }
+
+        Label predicted_label {
+          halign: start;
+          margin-bottom: 12;
+
+          styles [
+            "title-1",
+          ]
+        }
+      }
+    }
+  }
+}
