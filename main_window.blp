@@ -104,7 +104,7 @@ template $DrawingAreaWindow: Adw.ApplicationWindow {
                 ]
 
                 Frame {
-                  Image preview_image {
+                  Image sklearn_preview_image {
                     width-request: 100;
                     height-request: 100;
                     pixel-size: 100;
@@ -125,13 +125,89 @@ template $DrawingAreaWindow: Adw.ApplicationWindow {
                   ]
                 }
 
-                Label predicted_label {
+                Label sklearn_predicted_label {
                   halign: start;
                   selectable: true;
 
                   styles [
                     "title-1",
                   ]
+                }
+              }
+            }
+          }
+        }
+
+        Separator {}
+
+        Adw.Clamp {
+          maximum-size: 300;
+
+          Box {
+            orientation: vertical;
+            spacing: 12;
+            width-request: 300;
+
+            Label {
+              label: _("TensorFlow");
+              halign: start;
+              selectable: true;
+
+              styles [
+                "title-3",
+              ]
+            }
+
+            Label {
+              label: _("The model has trained on 28x28 images from MNIST dataset (from keras.datasets).");
+              halign: fill;
+              wrap: true;
+              wrap-mode: word;
+              selectable: true;
+              justify: fill;
+
+              styles [
+                "dimmed",
+              ]
+            }
+
+            Box {
+              orientation: horizontal;
+              spacing: 12;
+
+              Adw.Bin {
+                halign: start;
+                valign: start;
+
+                styles [
+                  "card",
+                ]
+
+                Frame {
+                  Image tf_preview_image {
+                    width-request: 100;
+                    height-request: 100;
+                    pixel-size: 100;
+                  }
+                }
+              }
+
+              Box {
+                orientation: vertical;
+
+                Label {
+                  label: _("Prediction");
+                  halign: start;
+                  selectable: true;
+
+                  styles [
+                    "heading",
+                  ]
+                }
+
+                Label tf_predicted_label {
+                  halign: start;
+                  selectable: true;
                 }
               }
             }

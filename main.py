@@ -20,6 +20,8 @@ import sys
 
 import cairo
 import gi
+import numpy as np
+import tensorflow as tf
 from joblib import load
 from PIL import Image
 from sklearn import svm
@@ -47,6 +49,11 @@ def get_clf() -> svm.SVC:
     return load(model_file)
 
 
+def get_tf():
+    model_file = to_full_path("models/tf_learn_digits.keras")
+    return tf.keras.models.load_model(model_file)
+
+
 def get_drawing_cursor() -> Gdk.Cursor:
     texture = Gdk.Texture.new_from_filename(to_full_path("res/pencil-symbolic.png"))
     return Gdk.Cursor.new_from_texture(texture, 0, 31)
@@ -58,14 +65,17 @@ class DrawingAreaWindow(Adw.ApplicationWindow):
     root_box: Gtk.Box = Gtk.Template.Child()
     input_label: Gtk.Label = Gtk.Template.Child()
     drawing_area: Gtk.DrawingArea = Gtk.Template.Child()
-    preview_image: Gtk.Image = Gtk.Template.Child()
+    sklearn_preview_image: Gtk.Image = Gtk.Template.Child()
     clear_button: Gtk.Button = Gtk.Template.Child()
-    predicted_label: Gtk.Label = Gtk.Template.Child()
+    sklearn_predicted_label: Gtk.Label = Gtk.Template.Child()
+    tf_predicted_label: Gtk.Label = Gtk.Template.Child()
+    tf_preview_image: Gtk.Image = Gtk.Template.Child()
 
     def __init__(self, app: Gtk.Application) -> None:
         super().__init__(application=app)
 
         self._clf = get_clf()
+        self._tf = get_tf()
 
         self._surface: cairo.ImageSurface | None = None
         self._last_point: tuple[float, float] | None = None
@@ -83,8 +93,11 @@ class DrawingAreaWindow(Adw.ApplicationWindow):
         drag.connect("drag-end", self._on_drag_end)
         self.drawing_area.add_controller(drag)
 
-        self.set_predicted_digit(None)
-        self._prediction_pending = False
+        self.set_sklearn_predicted_digit(None)
+        self._sklearn_prediction_pending = False
+
+        self.set_tf_predicted_digit(None)
+        self._tf_prediction_pending = False
 
     def clear(self):
         if self._surface is None:
@@ -99,48 +112,91 @@ class DrawingAreaWindow(Adw.ApplicationWindow):
         # to clear predicted label
         self.update_prediction()
 
-    def get_image_8x8(self) -> Image.Image | None:
+    def get_image(self, size: tuple[int, int]) -> Image.Image | None:
         if self._surface is None:
             return
 
         width = self._surface.get_width()
         height = self._surface.get_height()
         data = bytes(self._surface.get_data())
-        return resize_to_8x8(data, width, height)
+
+        pil = Image.frombytes("RGBA", (width, height), data)
+        return pil.resize(size, Image.Resampling.LANCZOS)
 
     def update_prediction(self):
-        def _update_prediction():
-            image_8x8 = self.get_image_8x8()
+        def _update_sklearn_prediction():
+            image_8x8 = self.get_image((8, 8))
             if image_8x8 is None:
                 return
 
-            self.update_preview_image(image_8x8)
+            self.update_sklearn_preview_image(image_8x8)
 
             # to grayscale
             grayscale_image_8x8 = image_8x8.convert("L")
 
             # convert image data for svm.SCV
-            floats = [(~b & 0xFF) // 16.0 for b in grayscale_image_8x8.tobytes()]
+            floats = [(~b & 0xFF) / 16.0 for b in grayscale_image_8x8.tobytes()]
 
             if not all(f == 0 for f in floats):
                 predicted_digit = self._clf.predict([floats])
-                self.set_predicted_digit(predicted_digit[0])
+                self.set_sklearn_predicted_digit(predicted_digit[0])
             else:
-                self.set_predicted_digit(None)
+                self.set_sklearn_predicted_digit(None)
 
-            self._prediction_pending = False
+            self._sklearn_prediction_pending = False
 
-        if not self._prediction_pending:
-            self._prediction_pending = True
-            GLib.idle_add(_update_prediction)
+        def _update_tf_prediction():
+            image_28x28 = self.get_image((28, 28))
+            if image_28x28 is None:
+                return
 
-    def update_preview_image(self, image: Image.Image):
-        self.preview_image.set_from_pixbuf(preview_pixbuf(image))
+            self.update_tf_preview_image(image_28x28)
 
-    def set_predicted_digit(self, predicted_digit: int | None):
+            # to grayscale
+            grayscale_image_28x28 = image_28x28.convert("L")
+
+            # convert image data for tf model
+            data = [(~b & 0xFF) / 255.0 for b in grayscale_image_28x28.tobytes()]
+
+            if not all(f == 0 for f in data):
+                floats = np.array(data).reshape(1, -1, 28)
+                predicted_digit = self._tf.predict(floats)
+
+                self.set_tf_predicted_digit(predicted_digit[0])
+            else:
+                self.set_tf_predicted_digit(None)
+
+            self._tf_prediction_pending = False
+
+        if not self._sklearn_prediction_pending:
+            self._sklearn_prediction_pending = True
+            GLib.idle_add(_update_sklearn_prediction)
+
+        if not self._tf_prediction_pending:
+            self._tf_prediction_pending = True
+            GLib.idle_add(_update_tf_prediction)
+
+    def update_sklearn_preview_image(self, image: Image.Image):
+        self.sklearn_preview_image.set_from_pixbuf(preview_pixbuf(image))
+
+    def update_tf_preview_image(self, image: Image.Image):
+        self.tf_preview_image.set_from_pixbuf(preview_pixbuf(image))
+
+    def set_sklearn_predicted_digit(self, predicted_digit: int | None):
         label = "..." if predicted_digit is None else f"{predicted_digit}"
 
-        self.predicted_label.set_label(label)
+        self.sklearn_predicted_label.set_label(label)
+
+    def set_tf_predicted_digit(self, predicted_digits: list[float] | None):
+        if predicted_digits is None:
+            label = "..."
+        else:
+            text = ""
+            for i, pd in enumerate(predicted_digits):
+                text += f"{i}: {int(pd * 100)}%\n"
+            label = text.rstrip()
+
+        self.tf_predicted_label.set_label(label)
 
     def _draw_line(self, x: float, y: float) -> None:
         if self._surface is None:
@@ -214,12 +270,6 @@ class DrawingApp(Adw.Application):
         if window is None:
             window = DrawingAreaWindow(self)
         window.present()
-
-
-def resize_to_8x8(data: bytes, width: int, height: int) -> Image.Image:
-    # L = 8-bit grayscale (A8)
-    pil = Image.frombytes("RGBA", (width, height), data)
-    return pil.resize((8, 8), Image.Resampling.LANCZOS)
 
 
 def preview_pixbuf(image: Image.Image) -> GdkPixbuf.Pixbuf | None:
