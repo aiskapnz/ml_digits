@@ -25,6 +25,7 @@ from threading import Thread
 import cairo
 import gi
 import numpy as np
+import openvino as ov
 import tensorflow as tf
 from joblib import load
 from PIL import Image
@@ -258,7 +259,7 @@ class DrawingApp(Adw.Application):
         self.connect("shutdown", self.on_shutdown)
         parent_conn, child_conn = Pipe()
         self.tf_worker_conn = parent_conn
-        self.tf_process = Process(target=_tf_worker, args=(child_conn,))
+        self.tf_process = Process(target=_tf_worker, args=(child_conn, "ov"))
         self.tf_process.start()
         self.main_window = None
 
@@ -287,8 +288,21 @@ def preview_pixbuf(image: Image.Image) -> GdkPixbuf.Pixbuf | None:
     return pixbuf.scale_simple(100, 100, GdkPixbuf.InterpType.TILES)
 
 
-def _tf_worker(conn: connection.Connection):
-    model = get_tf_model()
+def _tf_worker(conn: connection.Connection, model_engine: str = "ov"):
+    if model_engine == "tf":
+        model = get_tf_model()
+
+        def predict(floats):  # pyright: ignore[reportRedeclaration]
+            return model.predict(floats)[0]
+    elif model_engine == "ov":
+        model = get_ov_compiled_model()
+        output_key = model.output(0)
+
+        def predict(floats):
+            return model(floats)[output_key][0]
+    else:
+        return
+
     while True:
         task_image: Image.Image | None = conn.recv()
         if task_image is None:
@@ -303,7 +317,7 @@ def _tf_worker(conn: connection.Connection):
         predicted_digits = None
         if any(f > 0 for f in data):
             floats = np.array(data).reshape(1, -1, 28)
-            predicted_digits = model.predict(floats)[0]
+            predicted_digits = predict(floats)
 
         conn.send((image_28x28, predicted_digits))
 
@@ -326,6 +340,12 @@ def get_clf() -> svm.SVC:
 def get_tf_model():
     model_file = to_full_path("models/tf_learn_digits.keras")
     return tf.keras.models.load_model(model_file)
+
+
+def get_ov_compiled_model():
+    core = ov.Core()
+    model = core.read_model(to_full_path("models/tf_learn_digits.xml"))
+    return core.compile_model(model=model)
 
 
 def get_drawing_cursor() -> Gdk.Cursor:
