@@ -22,4 +22,4 @@ model.compile(
 model.fit(X_train, y_train, epochs=10)
 
 probability_model = tf.keras.Sequential([model, tf.keras.layers.Softmax()])
-probability_model.save("tf_learn_digits.keras")
+probability_model.save("./models/tf_learn_digits.keras")
