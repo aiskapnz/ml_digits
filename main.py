@@ -15,8 +15,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from __future__ import annotations
+
 import os
 import sys
+from multiprocessing import Pipe, Process, connection
+from threading import Thread
 
 import cairo
 import gi
@@ -37,30 +41,8 @@ from gi.repository import (  # type: ignore[import-not-found]  # noqa: E402
 )
 
 
-def to_full_path(path: str) -> str:
-    return os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        path,
-    )
-
-
-def get_clf() -> svm.SVC:
-    model_file = to_full_path("models/sk_learn_digits.joblib")
-    return load(model_file)
-
-
-def get_tf():
-    model_file = to_full_path("models/tf_learn_digits.keras")
-    return tf.keras.models.load_model(model_file)
-
-
-def get_drawing_cursor() -> Gdk.Cursor:
-    texture = Gdk.Texture.new_from_filename(to_full_path("res/pencil-symbolic.png"))
-    return Gdk.Cursor.new_from_texture(texture, 0, 31)
-
-
 @Gtk.Template(filename="main_window.ui")
-class DrawingAreaWindow(Adw.ApplicationWindow):
+class MainWindow(Adw.ApplicationWindow):
     __gtype_name__ = "DrawingAreaWindow"
     root_box: Gtk.Box = Gtk.Template.Child()
     input_label: Gtk.Label = Gtk.Template.Child()
@@ -71,11 +53,11 @@ class DrawingAreaWindow(Adw.ApplicationWindow):
     tf_predicted_label: Gtk.Label = Gtk.Template.Child()
     tf_preview_image: Gtk.Image = Gtk.Template.Child()
 
-    def __init__(self, app: Gtk.Application) -> None:
+    def __init__(self, app: DrawingApp) -> None:
         super().__init__(application=app)
+        self.app = app
 
         self._clf = get_clf()
-        self._tf = get_tf()
 
         self._surface: cairo.ImageSurface | None = None
         self._last_point: tuple[float, float] | None = None
@@ -96,8 +78,28 @@ class DrawingAreaWindow(Adw.ApplicationWindow):
         self.set_sklearn_predicted_digit(None)
         self._sklearn_prediction_pending = False
 
-        self.set_tf_predicted_digit(None)
+        self._on_tf_prediction(None)
         self._tf_prediction_pending = False
+
+        self.is_waiting_tf_result = True
+        self.tf_result_thread = Thread(target=self.tf_result_waiter, daemon=True)
+        self.tf_result_thread.start()
+
+    def do_close_request(self) -> bool:
+        self.is_waiting_tf_result = False
+        return Adw.ApplicationWindow.do_close_request(self)
+
+    def tf_result_waiter(self):
+        while self.is_waiting_tf_result:
+            if not self.app.tf_worker_conn.poll(0.01):
+                continue
+
+            result: tuple[Image.Image, list[float]] | None = (
+                self.app.tf_worker_conn.recv()
+            )
+            if result is None:
+                break
+            GLib.idle_add(self._on_tf_prediction, result)
 
     def clear(self):
         if self._surface is None:
@@ -112,22 +114,25 @@ class DrawingAreaWindow(Adw.ApplicationWindow):
         # to clear predicted label
         self.update_prediction()
 
-    def get_image(self, size: tuple[int, int]) -> Image.Image | None:
+    def get_image_data(self) -> tuple[bytes, tuple[int, int]] | None:
         if self._surface is None:
             return
 
         width = self._surface.get_width()
         height = self._surface.get_height()
         data = bytes(self._surface.get_data())
-
-        pil = Image.frombytes("RGBA", (width, height), data)
-        return pil.resize(size, Image.Resampling.LANCZOS)
+        return (data, (width, height))
 
     def update_prediction(self):
         def _update_sklearn_prediction():
-            image_8x8 = self.get_image((8, 8))
-            if image_8x8 is None:
+            image_data = self.get_image_data()
+
+            if image_data is None:
                 return
+
+            image_bytes, size = image_data
+            image = Image.frombytes("RGBA", size, image_bytes)
+            image_8x8 = image.resize((8, 8), Image.Resampling.LANCZOS)
 
             self.update_sklearn_preview_image(image_8x8)
 
@@ -145,58 +150,44 @@ class DrawingAreaWindow(Adw.ApplicationWindow):
 
             self._sklearn_prediction_pending = False
 
-        def _update_tf_prediction():
-            image_28x28 = self.get_image((28, 28))
-            if image_28x28 is None:
-                return
-
-            self.update_tf_preview_image(image_28x28)
-
-            # to grayscale
-            grayscale_image_28x28 = image_28x28.convert("L")
-
-            # convert image data for tf model
-            data = [(~b & 0xFF) / 255.0 for b in grayscale_image_28x28.tobytes()]
-
-            if not all(f == 0 for f in data):
-                floats = np.array(data).reshape(1, -1, 28)
-                predicted_digit = self._tf.predict(floats)
-
-                self.set_tf_predicted_digit(predicted_digit[0])
-            else:
-                self.set_tf_predicted_digit(None)
-
-            self._tf_prediction_pending = False
-
         if not self._sklearn_prediction_pending:
             self._sklearn_prediction_pending = True
             GLib.idle_add(_update_sklearn_prediction)
 
         if not self._tf_prediction_pending:
             self._tf_prediction_pending = True
-            GLib.idle_add(_update_tf_prediction)
+            image_data = self.get_image_data()
+
+            if image_data is None:
+                self._tf_prediction_pending = False
+                return
+
+            data, size = image_data
+            image = Image.frombytes("RGBA", size, data)
+            self.app.tf_worker_conn.send(image)
+
+    def _on_tf_prediction(self, result: tuple[Image.Image, list[float]] | None):
+        self._tf_prediction_pending = False
+        label = "..."
+        if result is not None:
+            image, predicted_digits = result
+            self.tf_preview_image.set_from_pixbuf(preview_pixbuf(image))
+
+            if predicted_digits is not None:
+                label = ""
+                for i, pd in enumerate(predicted_digits):
+                    label += f"{i}: {int(pd * 100)}%\n"
+                label = label.rstrip()
+
+        self.tf_predicted_label.set_label(label)
 
     def update_sklearn_preview_image(self, image: Image.Image):
         self.sklearn_preview_image.set_from_pixbuf(preview_pixbuf(image))
-
-    def update_tf_preview_image(self, image: Image.Image):
-        self.tf_preview_image.set_from_pixbuf(preview_pixbuf(image))
 
     def set_sklearn_predicted_digit(self, predicted_digit: int | None):
         label = "..." if predicted_digit is None else f"{predicted_digit}"
 
         self.sklearn_predicted_label.set_label(label)
-
-    def set_tf_predicted_digit(self, predicted_digits: list[float] | None):
-        if predicted_digits is None:
-            label = "..."
-        else:
-            text = ""
-            for i, pd in enumerate(predicted_digits):
-                text += f"{i}: {int(pd * 100)}%\n"
-            label = text.rstrip()
-
-        self.tf_predicted_label.set_label(label)
 
     def _draw_line(self, x: float, y: float) -> None:
         if self._surface is None:
@@ -264,12 +255,22 @@ class DrawingAreaWindow(Adw.ApplicationWindow):
 class DrawingApp(Adw.Application):
     def __init__(self) -> None:
         super().__init__(application_id="com.example.DrawingApp")
+        self.connect("shutdown", self.on_shutdown)
+        parent_conn, child_conn = Pipe()
+        self.tf_worker_conn = parent_conn
+        self.tf_process = Process(target=_tf_worker, args=(child_conn,))
+        self.tf_process.start()
+        self.main_window = None
 
     def do_activate(self) -> None:
-        window = self.props.active_window
-        if window is None:
-            window = DrawingAreaWindow(self)
-        window.present()
+        self.main_window = self.props.active_window
+        if self.main_window is None:
+            self.main_window = MainWindow(self)
+        self.main_window.present()
+
+    def on_shutdown(self, _data):
+        self.tf_worker_conn.send(None)
+        self.tf_process.join()
 
 
 def preview_pixbuf(image: Image.Image) -> GdkPixbuf.Pixbuf | None:
@@ -284,6 +285,52 @@ def preview_pixbuf(image: Image.Image) -> GdkPixbuf.Pixbuf | None:
     )
     # todo: scale width, height as args
     return pixbuf.scale_simple(100, 100, GdkPixbuf.InterpType.TILES)
+
+
+def _tf_worker(conn: connection.Connection):
+    model = get_tf_model()
+    while True:
+        task_image: Image.Image | None = conn.recv()
+        if task_image is None:
+            break
+
+        image_28x28 = task_image.resize((28, 28), Image.Resampling.LANCZOS)
+        grayscale_image_28x28 = image_28x28.convert("L")
+
+        # convert image data for tf model
+        data = [(~b & 0xFF) / 255.0 for b in grayscale_image_28x28.tobytes()]
+
+        predicted_digits = None
+        if any(f > 0 for f in data):
+            floats = np.array(data).reshape(1, -1, 28)
+            predicted_digits = model.predict(floats)[0]
+
+        conn.send((image_28x28, predicted_digits))
+
+    conn.send(None)
+    conn.close()
+
+
+def to_full_path(path: str) -> str:
+    return os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        path,
+    )
+
+
+def get_clf() -> svm.SVC:
+    model_file = to_full_path("models/sk_learn_digits.joblib")
+    return load(model_file)
+
+
+def get_tf_model():
+    model_file = to_full_path("models/tf_learn_digits.keras")
+    return tf.keras.models.load_model(model_file)
+
+
+def get_drawing_cursor() -> Gdk.Cursor:
+    texture = Gdk.Texture.new_from_filename(to_full_path("res/pencil-symbolic.png"))
+    return Gdk.Cursor.new_from_texture(texture, 0, 31)
 
 
 def main() -> None:
