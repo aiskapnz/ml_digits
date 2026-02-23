@@ -200,7 +200,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         context = cairo.Context(self._surface)
         context.set_source_rgb(0.0, 0.0, 0.0)
-        context.set_line_width(20.0)
+        context.set_line_width(16.0)
         context.set_line_cap(cairo.LineCap.ROUND)
         context.move_to(*self._last_point)
         context.line_to(x, y)
