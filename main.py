@@ -75,26 +75,23 @@ class MainWindow(Adw.ApplicationWindow):
         drag.connect("drag-end", self._on_drag_end)
         self.drawing_area.add_controller(drag)
 
-        self.set_sklearn_predicted_digit(None)
-        self._sklearn_prediction_pending = False
+        self._on_prediction(None)
+        self._prediction_pending = False
 
-        self._on_tf_prediction(None)
-        self._tf_prediction_pending = False
-
-        self.is_waiting_tf_result = True
-        self.tf_result_thread = Thread(target=self.tf_result_waiter, daemon=True)
-        self.tf_result_thread.start()
+        self.is_waiting_result = True
+        self._result_waiter_thread = Thread(target=self.result_waiter, daemon=True)
+        self._result_waiter_thread.start()
 
     def do_close_request(self) -> bool:
-        self.is_waiting_tf_result = False
+        self.is_waiting_result = False
         return Adw.ApplicationWindow.do_close_request(self)
 
-    def tf_result_waiter(self):
-        while self.is_waiting_tf_result:
-            result: TFResult | None = self.app.tf_worker_conn.recv()
+    def result_waiter(self):
+        while self.is_waiting_result:
+            result: tuple[SKLearnResult, TFResult] | None = self.app.worker_conn.recv()
             if result is None:
                 break
-            GLib.idle_add(self._on_tf_prediction, result)
+            GLib.idle_add(self._on_prediction, result)
 
     def clear(self):
         if self._surface is None:
@@ -119,51 +116,31 @@ class MainWindow(Adw.ApplicationWindow):
         return (data, (width, height))
 
     def update_prediction(self):
-        def _update_sklearn_prediction():
+        if not self._prediction_pending:
+            self._prediction_pending = True
             image_data = self.get_image_data()
 
             if image_data is None:
-                return
-
-            image_bytes, size = image_data
-            image = Image.frombytes("RGBA", size, image_bytes)
-            grayscale_image_8x8 = image.convert("L").resize(
-                (8, 8), Image.Resampling.LANCZOS
-            )
-
-            self.update_sklearn_preview_image(grayscale_image_8x8)
-
-            # convert image data for svm.SCV
-            floats = [(~b & 0xFF) / 16.0 for b in grayscale_image_8x8.tobytes()]
-
-            if not all(f == 0 for f in floats):
-                predicted_digit = self._clf.predict([floats])
-                self.set_sklearn_predicted_digit(predicted_digit[0])
-            else:
-                self.set_sklearn_predicted_digit(None)
-
-            self._sklearn_prediction_pending = False
-
-        if not self._sklearn_prediction_pending:
-            self._sklearn_prediction_pending = True
-            GLib.idle_add(_update_sklearn_prediction)
-
-        if not self._tf_prediction_pending:
-            self._tf_prediction_pending = True
-            image_data = self.get_image_data()
-
-            if image_data is None:
-                self._tf_prediction_pending = False
+                self._prediction_pending = False
                 return
 
             data, size = image_data
             image = Image.frombytes("RGBA", size, data)
 
             # send image to process
-            self.app.tf_worker_conn.send(image)
+            self.app.worker_conn.send(image)
+
+    def _on_prediction(self, result: tuple[SKLearnResult, TFResult] | None):
+        self._prediction_pending = False
+        sklearn_result, tf_result = None, None
+
+        if result is not None:
+            sklearn_result, tf_result = result
+
+        self._on_sklearn_prediction(sklearn_result)
+        self._on_tf_prediction(tf_result)
 
     def _on_tf_prediction(self, result: TFResult | None):
-        self._tf_prediction_pending = False
         label = "..."
 
         if result is not None:
@@ -178,12 +155,15 @@ class MainWindow(Adw.ApplicationWindow):
 
         self.tf_predicted_label.set_label(label)
 
-    def update_sklearn_preview_image(self, image: Image.Image):
-        self.sklearn_preview_image.set_from_paintable(new_preview_texture(image))
+    def _on_sklearn_prediction(self, result: SKLearnResult | None):
+        digit = None
+        if result is not None:
+            digit = result.predicted_digit
+            self.sklearn_preview_image.set_from_paintable(
+                new_preview_texture(result.preview_image)
+            )
 
-    def set_sklearn_predicted_digit(self, predicted_digit: int | None):
-        label = "..." if predicted_digit is None else f"{predicted_digit}"
-
+        label = "..." if digit is None else f"{digit}"
         self.sklearn_predicted_label.set_label(label)
 
     def _draw_line(self, x: float, y: float) -> None:
@@ -254,7 +234,7 @@ class DrawingApp(Adw.Application):
         super().__init__(application_id="com.example.DrawingApp")
         self.connect("shutdown", self.on_shutdown)
         parent_conn, child_conn = Pipe()
-        self.tf_worker_conn = parent_conn
+        self.worker_conn = parent_conn
         self.tf_process = Process(target=run_tf_worker, args=(child_conn, "ov"))
         self.tf_process.start()
         self.main_window = None
@@ -266,7 +246,7 @@ class DrawingApp(Adw.Application):
         self.main_window.present()
 
     def on_shutdown(self, _data):
-        self.tf_worker_conn.send(None)
+        self.worker_conn.send(None)
         self.tf_process.join()
 
 
@@ -276,6 +256,12 @@ class TFResult:
     ):
         self.preview_image = preview_image
         self.predicted_digits = predicted_digits
+
+
+class SKLearnResult:
+    def __init__(self, preview_image: Image.Image, predicted_digit: int | None):
+        self.preview_image = preview_image
+        self.predicted_digit = predicted_digit
 
 
 def new_preview_image(image: Image.Image) -> Image.Image:
@@ -316,27 +302,48 @@ def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
     else:
         return
 
+    clf = get_clf()
+
+    def _sklearn_process(grayscale_image: Image.Image) -> SKLearnResult:
+        grayscale_image_8x8 = grayscale_image.resize((8, 8), Image.Resampling.LANCZOS)
+        # convert image data for svm.SCV
+        sk_learn_data = [(~b & 0xFF) / 16.0 for b in grayscale_image_8x8.tobytes()]
+
+        predicted_digit = None
+        if any(f > 0 for f in sk_learn_data):
+            predicted_digit = clf.predict([sk_learn_data])[0]
+
+        return SKLearnResult(new_preview_image(grayscale_image_8x8), predicted_digit)
+
+    def _tf_process(grayscale_image: Image.Image) -> TFResult:
+        grayscale_image_28x28 = grayscale_image.resize(
+            (28, 28), Image.Resampling.LANCZOS
+        )
+        # convert image data for tf model
+        tf_data = [(~b & 0xFF) / 255.0 for b in grayscale_image_28x28.tobytes()]
+
+        predicted_digits = None
+        if any(f > 0 for f in tf_data):
+            floats = np.array(tf_data).reshape(1, -1, 28)
+            predicted_digits = predict(floats)
+
+        return TFResult(new_preview_image(grayscale_image_28x28), predicted_digits)
+
     # work loop
     while True:
         task_image: Image.Image | None = conn.recv()
         if task_image is None:
             break
 
-        grayscale_image_28x28 = task_image.convert("L").resize(
-            (28, 28), Image.Resampling.LANCZOS
-        )
+        grayscale_image = task_image.convert("L")
 
-        # convert image data for tf model
-        data = [(~b & 0xFF) / 255.0 for b in grayscale_image_28x28.tobytes()]
+        # scikit-learn
+        sklearn_result = _sklearn_process(grayscale_image)
 
-        predicted_digits = None
-        if any(f > 0 for f in data):
-            floats = np.array(data).reshape(1, -1, 28)
-            predicted_digits = predict(floats)
+        # tensor flow (openvino)
+        tf_result = _tf_process(grayscale_image)
 
-        image = new_preview_image(grayscale_image_28x28)
-        tf_result = TFResult(image, predicted_digits)
-        conn.send(tf_result)
+        conn.send((sklearn_result, tf_result))
 
     conn.send(None)
     conn.close()
