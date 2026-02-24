@@ -36,7 +36,6 @@ gi.require_version("Adw", "1")
 from gi.repository import (  # type: ignore[import-not-found]  # noqa: E402
     Adw,  # pyright: ignore[reportMissingModuleSource]
     Gdk,  # pyright: ignore[reportMissingModuleSource]
-    GdkPixbuf,  # pyright: ignore[reportMissingModuleSource]
     GLib,  # pyright: ignore[reportMissingModuleSource]
     Gtk,  # pyright: ignore[reportMissingModuleSource]
 )
@@ -92,9 +91,6 @@ class MainWindow(Adw.ApplicationWindow):
 
     def tf_result_waiter(self):
         while self.is_waiting_tf_result:
-            if not self.app.tf_worker_conn.poll(0.01):
-                continue
-
             result: tuple[Image.Image, list[float]] | None = (
                 self.app.tf_worker_conn.recv()
             )
@@ -133,12 +129,11 @@ class MainWindow(Adw.ApplicationWindow):
 
             image_bytes, size = image_data
             image = Image.frombytes("RGBA", size, image_bytes)
-            image_8x8 = image.resize((8, 8), Image.Resampling.LANCZOS)
+            grayscale_image_8x8 = image.convert("L").resize(
+                (8, 8), Image.Resampling.LANCZOS
+            )
 
-            self.update_sklearn_preview_image(image_8x8)
-
-            # to grayscale
-            grayscale_image_8x8 = image_8x8.convert("L")
+            self.update_sklearn_preview_image(grayscale_image_8x8)
 
             # convert image data for svm.SCV
             floats = [(~b & 0xFF) / 16.0 for b in grayscale_image_8x8.tobytes()]
@@ -165,14 +160,18 @@ class MainWindow(Adw.ApplicationWindow):
 
             data, size = image_data
             image = Image.frombytes("RGBA", size, data)
+
+            # send image to process
             self.app.tf_worker_conn.send(image)
 
     def _on_tf_prediction(self, result: tuple[Image.Image, list[float]] | None):
         self._tf_prediction_pending = False
         label = "..."
+
         if result is not None:
-            image, predicted_digits = result
-            self.tf_preview_image.set_from_pixbuf(preview_pixbuf(image))
+            preview_image, predicted_digits = result
+            preview_texture = new_preview_texture(preview_image)
+            self.tf_preview_image.set_from_paintable(preview_texture)
 
             if predicted_digits is not None:
                 label = ""
@@ -183,7 +182,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.tf_predicted_label.set_label(label)
 
     def update_sklearn_preview_image(self, image: Image.Image):
-        self.sklearn_preview_image.set_from_pixbuf(preview_pixbuf(image))
+        self.sklearn_preview_image.set_from_paintable(new_preview_texture(image))
 
     def set_sklearn_predicted_digit(self, predicted_digit: int | None):
         label = "..." if predicted_digit is None else f"{predicted_digit}"
@@ -259,7 +258,7 @@ class DrawingApp(Adw.Application):
         self.connect("shutdown", self.on_shutdown)
         parent_conn, child_conn = Pipe()
         self.tf_worker_conn = parent_conn
-        self.tf_process = Process(target=_tf_worker, args=(child_conn, "ov"))
+        self.tf_process = Process(target=run_tf_worker, args=(child_conn, "ov"))
         self.tf_process.start()
         self.main_window = None
 
@@ -274,21 +273,30 @@ class DrawingApp(Adw.Application):
         self.tf_process.join()
 
 
-def preview_pixbuf(image: Image.Image) -> GdkPixbuf.Pixbuf | None:
-    pixbuf = GdkPixbuf.Pixbuf.new_from_bytes(
-        GLib.Bytes.new(image.tobytes()),
-        GdkPixbuf.Colorspace.RGB,
-        True,
-        8,
+def new_preview_image(image: Image.Image) -> Image.Image:
+    if image.format != "RGBA":
+        image = image.convert("RGBA")
+
+    if image.size != (100, 100):
+        image = image.resize((100, 100), Image.Resampling.BOX)
+    return image
+
+
+def new_preview_texture(image: Image.Image) -> Gdk.MemoryTexture | None:
+    image = new_preview_image(image)
+
+    texture = Gdk.MemoryTexture.new(
         image.width,
         image.height,
+        Gdk.MemoryFormat.R8G8B8A8,
+        GLib.Bytes.new(image.tobytes()),
         image.width * 4,
     )
-    # todo: scale width, height as args
-    return pixbuf.scale_simple(100, 100, GdkPixbuf.InterpType.TILES)
+
+    return texture
 
 
-def _tf_worker(conn: connection.Connection, model_engine: str = "ov"):
+def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
     if model_engine == "tf":
         model = get_tf_model()
 
@@ -303,13 +311,15 @@ def _tf_worker(conn: connection.Connection, model_engine: str = "ov"):
     else:
         return
 
+    # work loop
     while True:
         task_image: Image.Image | None = conn.recv()
         if task_image is None:
             break
 
-        image_28x28 = task_image.resize((28, 28), Image.Resampling.LANCZOS)
-        grayscale_image_28x28 = image_28x28.convert("L")
+        grayscale_image_28x28 = task_image.convert("L").resize(
+            (28, 28), Image.Resampling.LANCZOS
+        )
 
         # convert image data for tf model
         data = [(~b & 0xFF) / 255.0 for b in grayscale_image_28x28.tobytes()]
@@ -319,7 +329,8 @@ def _tf_worker(conn: connection.Connection, model_engine: str = "ov"):
             floats = np.array(data).reshape(1, -1, 28)
             predicted_digits = predict(floats)
 
-        conn.send((image_28x28, predicted_digits))
+        image = new_preview_image(grayscale_image_28x28)
+        conn.send((image, predicted_digits))
 
     conn.send(None)
     conn.close()
