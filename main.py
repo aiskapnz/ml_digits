@@ -91,9 +91,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def tf_result_waiter(self):
         while self.is_waiting_tf_result:
-            result: tuple[Image.Image, list[float]] | None = (
-                self.app.tf_worker_conn.recv()
-            )
+            result: TFResult | None = self.app.tf_worker_conn.recv()
             if result is None:
                 break
             GLib.idle_add(self._on_tf_prediction, result)
@@ -164,18 +162,17 @@ class MainWindow(Adw.ApplicationWindow):
             # send image to process
             self.app.tf_worker_conn.send(image)
 
-    def _on_tf_prediction(self, result: tuple[Image.Image, list[float]] | None):
+    def _on_tf_prediction(self, result: TFResult | None):
         self._tf_prediction_pending = False
         label = "..."
 
         if result is not None:
-            preview_image, predicted_digits = result
-            preview_texture = new_preview_texture(preview_image)
+            preview_texture = new_preview_texture(result.preview_image)
             self.tf_preview_image.set_from_paintable(preview_texture)
 
-            if predicted_digits is not None:
+            if result.predicted_digits is not None:
                 label = ""
-                for i, pd in enumerate(predicted_digits):
+                for i, pd in enumerate(result.predicted_digits):
                     label += f"{i}: {int(pd * 100)}%\n"
                 label = label.rstrip()
 
@@ -273,6 +270,14 @@ class DrawingApp(Adw.Application):
         self.tf_process.join()
 
 
+class TFResult:
+    def __init__(
+        self, preview_image: Image.Image, predicted_digits: list[float] | None
+    ):
+        self.preview_image = preview_image
+        self.predicted_digits = predicted_digits
+
+
 def new_preview_image(image: Image.Image) -> Image.Image:
     if image.format != "RGBA":
         image = image.convert("RGBA")
@@ -330,7 +335,8 @@ def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
             predicted_digits = predict(floats)
 
         image = new_preview_image(grayscale_image_28x28)
-        conn.send((image, predicted_digits))
+        tf_result = TFResult(image, predicted_digits)
+        conn.send(tf_result)
 
     conn.send(None)
     conn.close()
