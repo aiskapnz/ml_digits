@@ -232,11 +232,17 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
                                   <object class="GtkLabel" id="tf_predicted_label">
                                     <property name="halign">1</property>
                                     <property name="selectable">true</property>
+                                    <style>
+                                      <class name="title-1"/>
+                                    </style>
                                   </object>
                                 </child>
                               </object>
                             </child>
                           </object>
+                        </child>
+                        <child>
+                          <object class="Digits" id="tf_digits"></object>
                         </child>
                       </object>
                     </child>

@@ -31,6 +31,8 @@ from joblib import load
 from PIL import Image
 from sklearn import svm
 
+import digits
+
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import (  # type: ignore[import-not-found]  # noqa: E402
@@ -52,6 +54,7 @@ class MainWindow(Adw.ApplicationWindow):
     sklearn_predicted_label: Gtk.Label = Gtk.Template.Child()
     tf_predicted_label: Gtk.Label = Gtk.Template.Child()
     tf_preview_image: Gtk.Image = Gtk.Template.Child()
+    tf_digits: digits.Digits = Gtk.Template.Child()
 
     def __init__(self, app: DrawingApp) -> None:
         super().__init__(application=app)
@@ -146,12 +149,19 @@ class MainWindow(Adw.ApplicationWindow):
         if result is not None:
             preview_texture = new_preview_texture(result.preview_image)
             self.tf_preview_image.set_from_paintable(preview_texture)
+            self.tf_digits.set_probs(result.predicted_digits)
 
-            if result.predicted_digits is not None:
-                label = ""
-                for i, pd in enumerate(result.predicted_digits):
-                    label += f"{i}: {int(pd * 100)}%\n"
-                label = label.rstrip()
+            index, value = max(enumerate(result.predicted_digits), key=lambda iv: iv[1])
+            # treshhold is 70%
+            if value > 0.7:
+                label = f"{index}"
+
+            # TODO: display the probability
+
+            # label = ""
+            # for i, pd in enumerate(result.predicted_digits):
+            #     label += f"{i}: {int(pd * 100)}%\n"
+            # label = label.rstrip()
 
         self.tf_predicted_label.set_label(label)
 
@@ -251,9 +261,7 @@ class DrawingApp(Adw.Application):
 
 
 class TFResult:
-    def __init__(
-        self, preview_image: Image.Image, predicted_digits: list[float] | None
-    ):
+    def __init__(self, preview_image: Image.Image, predicted_digits: list[float]):
         self.preview_image = preview_image
         self.predicted_digits = predicted_digits
 
@@ -322,10 +330,8 @@ def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
         # convert image data for tf model
         tf_data = [(~b & 0xFF) / 255.0 for b in grayscale_image_28x28.tobytes()]
 
-        predicted_digits = None
-        if any(f > 0 for f in tf_data):
-            floats = np.array(tf_data).reshape(1, -1, 28)
-            predicted_digits = predict(floats)
+        floats = np.array(tf_data).reshape(1, -1, 28)
+        predicted_digits = predict(floats)
 
         return TFResult(new_preview_image(grayscale_image_28x28), predicted_digits)
 

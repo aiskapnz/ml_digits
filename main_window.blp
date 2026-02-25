@@ -208,9 +208,15 @@ template $DrawingAreaWindow: Adw.ApplicationWindow {
                 Label tf_predicted_label {
                   halign: start;
                   selectable: true;
+
+                  styles [
+                    "title-1",
+                  ]
                 }
               }
             }
+
+            $Digits tf_digits {}
           }
         }
       }
