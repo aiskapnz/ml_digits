@@ -4,6 +4,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import (  # type: ignore[import-not-found]  # noqa: E402
+    Adw,  # pyright: ignore[reportMissingModuleSource]
     Gdk,  # pyright: ignore[reportMissingModuleSource]
     Gtk,  # pyright: ignore[reportMissingModuleSource]
 )
@@ -38,10 +39,8 @@ class ScreenPalette:
         self.on_pixel_color = on_pixel_color
 
 
-# 546200 - base color
 DEFAULT_DARK_PALETTE = ScreenPalette("#222b00", "#3a4600", "#8d9e4c")
-# TODO: colors for the light theme
-DEFAULT_LIGHT_PALETTE = ScreenPalette("#222b00", "#3a4600", "#8d9e4c")
+DEFAULT_LIGHT_PALETTE = ScreenPalette("#3a4600", "#546201", "#ecffaa")
 
 DIGIT_BIT_MATRIX_WIDTH = 5
 
@@ -162,7 +161,7 @@ DIGIT_BIT_MATRICES = [
 class DigitsDisplay(Gtk.Box):
     __gtype_name__ = "DigitsDisplay"
 
-    def __init__(self, palette: ScreenPalette = DEFAULT_DARK_PALETTE):
+    def __init__(self):
         self.set_orientation(Gtk.Orientation.HORIZONTAL)
         self.set_spacing(4)
         self.w_block = 35
@@ -182,7 +181,12 @@ class DigitsDisplay(Gtk.Box):
         box.append(Gtk.Frame(child=self.drawing_area))
         self.append(box)
 
-        self.palette = palette
+        manager = Adw.StyleManager.get_default()
+        manager.connect("notify::dark", self.on_dark)
+        self.set_palette(manager.get_dark())
+
+    def on_dark(self, manager: Adw.StyleManager, _p):
+        self.set_palette(manager.get_dark())
 
     def on_draw(
         self,
@@ -229,11 +233,18 @@ class DigitsDisplay(Gtk.Box):
                 draw_pixel(cr, x, y, self.pixel_size, color)
                 x += w_cell
 
+    def set_palette(self, dark: bool):
+        self.palette = DEFAULT_DARK_PALETTE if dark else DEFAULT_LIGHT_PALETTE
+        self.redraw()
+
     def set_probs(self, probs: list[float]):
         if len(probs) != 10:
             return
 
         self.digits_probs = probs
+        self.redraw()
+
+    def redraw(self):
         self.drawing_area.queue_draw()
 
 
