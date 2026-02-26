@@ -242,7 +242,7 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
                           </object>
                         </child>
                         <child>
-                          <object class="Digits" id="tf_digits"></object>
+                          <object class="DigitsDisplay" id="tf_digits_display"></object>
                         </child>
                       </object>
                     </child>

@@ -31,7 +31,7 @@ from joblib import load
 from PIL import Image
 from sklearn import svm
 
-import digits
+import digits_display
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
@@ -54,7 +54,7 @@ class MainWindow(Adw.ApplicationWindow):
     sklearn_predicted_label: Gtk.Label = Gtk.Template.Child()
     tf_predicted_label: Gtk.Label = Gtk.Template.Child()
     tf_preview_image: Gtk.Image = Gtk.Template.Child()
-    tf_digits: digits.Digits = Gtk.Template.Child()
+    tf_digits_display: digits_display.DigitsDisplay = Gtk.Template.Child()
 
     def __init__(self, app: DrawingApp) -> None:
         super().__init__(application=app)
@@ -149,19 +149,12 @@ class MainWindow(Adw.ApplicationWindow):
         if result is not None:
             preview_texture = new_preview_texture(result.preview_image)
             self.tf_preview_image.set_from_paintable(preview_texture)
-            self.tf_digits.set_probs(result.predicted_digits)
+            self.tf_digits_display.set_probs(result.predicted_digits)
 
             index, value = max(enumerate(result.predicted_digits), key=lambda iv: iv[1])
             # treshhold is 70%
             if value > 0.7:
                 label = f"{index}"
-
-            # TODO: display the probability
-
-            # label = ""
-            # for i, pd in enumerate(result.predicted_digits):
-            #     label += f"{i}: {int(pd * 100)}%\n"
-            # label = label.rstrip()
 
         self.tf_predicted_label.set_label(label)
 
