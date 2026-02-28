@@ -161,9 +161,12 @@ DIGIT_BIT_MATRICES = [
 class DigitsDisplay(Gtk.Box):
     __gtype_name__ = "DigitsDisplay"
 
-    def __init__(self):
+    def __init__(self, display_threshold=0.7):
         self.set_orientation(Gtk.Orientation.HORIZONTAL)
         self.set_spacing(4)
+
+        self.display_threshold = display_threshold
+
         self.w_block = 35
         self.h_block = 55
         self.w_cell = self.w_block / 7
@@ -184,6 +187,12 @@ class DigitsDisplay(Gtk.Box):
         manager = Adw.StyleManager.get_default()
         manager.connect("notify::dark", self.on_dark)
         self.set_palette(manager.get_dark())
+
+    def set_display_threshold(self, display_threshold: float):
+        """Set the probability threshold for lighting a digit display."""
+
+        self.display_threshold = display_threshold
+        self.redraw()
 
     def on_dark(self, manager: Adw.StyleManager, _p):
         self.set_palette(manager.get_dark())
@@ -207,7 +216,7 @@ class DigitsDisplay(Gtk.Box):
             color = plt.off_pixel_color
 
             d_prob = self.digits_probs[d]
-            if d_prob >= 0.5:
+            if d_prob >= self.display_threshold:
                 color = plt.on_pixel_color
 
             # draw a digit
@@ -227,7 +236,8 @@ class DigitsDisplay(Gtk.Box):
             y += h_cell
             for i in range(DIGIT_BIT_MATRIX_WIDTH):
                 color = plt.off_pixel_color
-                if d_prob >= i / DIGIT_BIT_MATRIX_WIDTH:
+                # not display for values under 0.1
+                if d_prob > 0.1 and (d_prob >= i / DIGIT_BIT_MATRIX_WIDTH):
                     color = plt.on_pixel_color
 
                 draw_pixel(cr, x, y, self.pixel_size, color)

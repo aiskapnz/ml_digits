@@ -42,6 +42,8 @@ from gi.repository import (  # type: ignore[import-not-found]  # noqa: E402
     Gtk,  # pyright: ignore[reportMissingModuleSource]
 )
 
+DIGIT_DISPLAY_TRESHOLD = 0.7
+
 
 @Gtk.Template(filename="main_window.ui")
 class MainWindow(Adw.ApplicationWindow):
@@ -75,6 +77,8 @@ class MainWindow(Adw.ApplicationWindow):
         drag.connect("drag-update", self._on_drag_update)
         drag.connect("drag-end", self._on_drag_end)
         self.drawing_area.add_controller(drag)
+
+        self.tf_digits_display.set_display_threshold(DIGIT_DISPLAY_TRESHOLD)
 
         self._on_prediction(None)
         self._prediction_pending = False
@@ -150,8 +154,7 @@ class MainWindow(Adw.ApplicationWindow):
             self.tf_digits_display.set_probs(result.predicted_digits)
 
             index, value = max(enumerate(result.predicted_digits), key=lambda iv: iv[1])
-            # treshhold is 70%
-            if value > 0.7:
+            if value >= DIGIT_DISPLAY_TRESHOLD:
                 label = f"{index}"
 
         self.tf_predicted_label.set_label(label)
