@@ -60,8 +60,6 @@ class MainWindow(Adw.ApplicationWindow):
         super().__init__(application=app)
         self.app = app
 
-        self._clf = get_clf()
-
         self._surface: cairo.ImageSurface | None = None
         self._last_point: tuple[float, float] | None = None
 
