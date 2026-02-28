@@ -45,7 +45,7 @@ from gi.repository import (  # type: ignore[import-not-found]  # noqa: E402
 
 @Gtk.Template(filename="main_window.ui")
 class MainWindow(Adw.ApplicationWindow):
-    __gtype_name__ = "DrawingAreaWindow"
+    __gtype_name__ = "MainWindow"
     root_box: Gtk.Box = Gtk.Template.Child()
     input_label: Gtk.Label = Gtk.Template.Child()
     drawing_area: Gtk.DrawingArea = Gtk.Template.Child()

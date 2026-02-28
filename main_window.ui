@@ -6,7 +6,7 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
 -->
 <interface>
   <requires lib="gtk" version="4.0"/>
-  <template class="DrawingAreaWindow" parent="AdwApplicationWindow">
+  <template class="MainWindow" parent="AdwApplicationWindow">
     <property name="title" translatable="yes">Recognizing hand-written digits</property>
     <property name="default-width">800</property>
     <property name="default-height">600</property>
