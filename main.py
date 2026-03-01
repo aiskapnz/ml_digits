@@ -271,6 +271,27 @@ class SKLearnResult:
         self.predicted_digit = predicted_digit
 
 
+def crop_to_content(image: np.ndarray) -> np.ndarray:
+    if not image.any():
+        return image
+
+    cropped_image = np.trim_zeros(image)
+    columns, rows = cropped_image.shape
+    min_size = 28
+    size = max(min_size, columns, rows)
+    pad = int(size * 0.2)
+
+    delta_columns = size - columns + pad
+    left = delta_columns // 2
+    right = delta_columns - left
+
+    delta_rows = size - rows + pad
+    top = delta_rows // 2
+    bottom = delta_rows - top
+
+    return np.pad(cropped_image, ((left, right), (top, bottom)))
+
+
 def new_preview_image(image: np.ndarray) -> np.ndarray:
     """Image should be in grayscale format"""
     image = cv.resize(image, (100, 100), interpolation=cv.INTER_AREA)
@@ -314,31 +335,33 @@ def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
         grayscale_image_8x8 = cv.resize(
             grayscale_image, (8, 8), interpolation=cv.INTER_AREA
         )
-        inverted_grayscale_image_8x8 = np.invert(grayscale_image_8x8)
 
         # convert image data for svm.SCV
-        sk_learn_data = inverted_grayscale_image_8x8 / 16.0
+        sk_learn_data = grayscale_image_8x8 / 16.0
 
         predicted_digit = None
         if sk_learn_data.any():
             predicted_digit = clf.predict(sk_learn_data.reshape(1, -1))[0]
 
-        return SKLearnResult(new_preview_image(grayscale_image_8x8), predicted_digit)
+        return SKLearnResult(
+            new_preview_image(np.invert(grayscale_image_8x8)), predicted_digit
+        )
 
     def _tf_process(grayscale_image: np.ndarray) -> TFResult:
         grayscale_image_28x28 = cv.resize(
             grayscale_image, (28, 28), interpolation=cv.INTER_AREA
         )
-        inverted_grayscale_image_28x28 = np.invert(grayscale_image_28x28)
 
         # convert image data for tf model
-        tf_data = inverted_grayscale_image_28x28 / 255.0
+        tf_data = grayscale_image_28x28 / 255.0
         predicted_digits = None
         if tf_data.any():
             floats = tf_data.reshape(1, -1, 28)
             predicted_digits = predict(floats)
 
-        return TFResult(new_preview_image(grayscale_image_28x28), predicted_digits)
+        return TFResult(
+            new_preview_image(np.invert(grayscale_image_28x28)), predicted_digits
+        )
 
     # work loop
     while True:
@@ -348,6 +371,8 @@ def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
             break
 
         grayscale_image = cv.cvtColor(task_image, cv.COLOR_BGRA2GRAY)
+        grayscale_image = np.invert(grayscale_image)
+        grayscale_image = crop_to_content(grayscale_image)
 
         # scikit-learn
         sklearn_result = _sklearn_process(grayscale_image)
