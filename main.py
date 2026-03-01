@@ -153,9 +153,12 @@ class MainWindow(Adw.ApplicationWindow):
             self.tf_preview_image.set_from_paintable(preview_texture)
             self.tf_digits_display.set_probs(result.predicted_digits)
 
-            index, value = max(enumerate(result.predicted_digits), key=lambda iv: iv[1])
-            if value >= DIGIT_DISPLAY_TRESHOLD:
-                label = f"{index}"
+            if result.predicted_digits is not None:
+                index, value = max(
+                    enumerate(result.predicted_digits), key=lambda iv: iv[1]
+                )
+                if value >= DIGIT_DISPLAY_TRESHOLD:
+                    label = f"{index}"
 
         self.tf_predicted_label.set_label(label)
 
@@ -257,7 +260,7 @@ class DrawingApp(Adw.Application):
 
 
 class TFResult:
-    def __init__(self, preview_image: np.ndarray, predicted_digits: list[float]):
+    def __init__(self, preview_image: np.ndarray, predicted_digits: list[float] | None):
         self.preview_image = preview_image
         self.predicted_digits = predicted_digits
 
@@ -330,9 +333,10 @@ def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
 
         # convert image data for tf model
         tf_data = inverted_grayscale_image_28x28 / 255.0
-
-        floats = tf_data.reshape(1, -1, 28)
-        predicted_digits = predict(floats)
+        predicted_digits = None
+        if tf_data.any():
+            floats = tf_data.reshape(1, -1, 28)
+            predicted_digits = predict(floats)
 
         return TFResult(new_preview_image(grayscale_image_28x28), predicted_digits)
 

@@ -160,6 +160,7 @@ DIGIT_BIT_MATRICES = [
 
 class DigitsDisplay(Gtk.Box):
     __gtype_name__ = "DigitsDisplay"
+    digits_probs: list[float]
 
     def __init__(self, display_threshold=0.7):
         self.set_orientation(Gtk.Orientation.HORIZONTAL)
@@ -172,7 +173,7 @@ class DigitsDisplay(Gtk.Box):
         self.w_cell = self.w_block / 7
         self.h_cell = self.h_block / 11
         self.pixel_size = (self.w_cell * 0.8, self.h_cell * 0.8)
-        self.digits_probs: list[float] = [0.0] * 10
+        self.reset_digit_probs()
 
         self.drawing_area = Gtk.DrawingArea(
             width_request=int(self.w_block * 10 + self.w_cell * 2),
@@ -187,6 +188,9 @@ class DigitsDisplay(Gtk.Box):
         manager = Adw.StyleManager.get_default()
         manager.connect("notify::dark", self.on_dark)
         self.set_palette(manager.get_dark())
+
+    def reset_digit_probs(self):
+        self.digits_probs = [0.0] * 10
 
     def set_display_threshold(self, display_threshold: float):
         """Set the probability threshold for lighting a digit display."""
@@ -247,11 +251,12 @@ class DigitsDisplay(Gtk.Box):
         self.palette = DEFAULT_DARK_PALETTE if dark else DEFAULT_LIGHT_PALETTE
         self.redraw()
 
-    def set_probs(self, probs: list[float]):
-        if len(probs) != 10:
-            return
+    def set_probs(self, probs: list[float] | None):
+        if probs is None or len(probs) != 10:
+            self.reset_digit_probs()
+        else:
+            self.digits_probs = probs
 
-        self.digits_probs = probs
         self.redraw()
 
     def redraw(self):
