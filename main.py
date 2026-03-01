@@ -23,12 +23,12 @@ from multiprocessing import Pipe, Process, connection
 from threading import Thread
 
 import cairo
+import cv2 as cv
 import gi
 import numpy as np
 import openvino as ov
 import tensorflow as tf
 from joblib import load
-from PIL import Image
 from sklearn import svm
 
 import digits_display
@@ -111,26 +111,26 @@ class MainWindow(Adw.ApplicationWindow):
         # to clear predicted label
         self.update_prediction()
 
-    def get_image_data(self) -> tuple[bytes, tuple[int, int]] | None:
+    def get_image(self) -> np.ndarray | None:
         if self._surface is None:
             return
 
         width = self._surface.get_width()
         height = self._surface.get_height()
-        data = bytes(self._surface.get_data())
-        return (data, (width, height))
+        data = self._surface.get_data()
+        image = np.frombuffer(data, dtype=np.uint8).reshape((width, height, 4))
+        return image
 
     def update_prediction(self):
         if not self._prediction_pending:
             self._prediction_pending = True
-            image_data = self.get_image_data()
+            image = self.get_image()
 
-            if image_data is None:
+            if image is None:
                 self._prediction_pending = False
                 return
 
-            data, size = image_data
-            image = Image.frombytes("RGBA", size, data)
+            image = cv.cvtColor(image, cv.COLOR_RGBA2BGRA)
 
             # send image to process
             self.app.worker_conn.send(image)
@@ -237,10 +237,12 @@ class DrawingApp(Adw.Application):
     def __init__(self) -> None:
         super().__init__(application_id="com.example.DrawingApp")
         self.connect("shutdown", self.on_shutdown)
+
         parent_conn, child_conn = Pipe()
         self.worker_conn = parent_conn
         self.tf_process = Process(target=run_tf_worker, args=(child_conn, "ov"))
         self.tf_process.start()
+
         self.main_window = None
 
     def do_activate(self) -> None:
@@ -255,35 +257,34 @@ class DrawingApp(Adw.Application):
 
 
 class TFResult:
-    def __init__(self, preview_image: Image.Image, predicted_digits: list[float]):
+    def __init__(self, preview_image: np.ndarray, predicted_digits: list[float]):
         self.preview_image = preview_image
         self.predicted_digits = predicted_digits
 
 
 class SKLearnResult:
-    def __init__(self, preview_image: Image.Image, predicted_digit: int | None):
+    def __init__(self, preview_image: np.ndarray, predicted_digit: int | None):
         self.preview_image = preview_image
         self.predicted_digit = predicted_digit
 
 
-def new_preview_image(image: Image.Image) -> Image.Image:
-    if image.format != "RGBA":
-        image = image.convert("RGBA")
-
-    if image.size != (100, 100):
-        image = image.resize((100, 100), Image.Resampling.BOX)
+def new_preview_image(image: np.ndarray) -> np.ndarray:
+    """Image should be in grayscale format"""
+    image = cv.resize(image, (100, 100), interpolation=cv.INTER_AREA)
+    image = cv.cvtColor(image, cv.COLOR_GRAY2RGBA)
     return image
 
 
-def new_preview_texture(image: Image.Image) -> Gdk.MemoryTexture | None:
-    image = new_preview_image(image)
-
+def new_preview_texture(image: np.ndarray) -> Gdk.MemoryTexture | None:
+    width, height, _ = image.shape
+    image_bytes = image.tobytes()
+    glib_bytes = GLib.Bytes.new(image_bytes)
     texture = Gdk.MemoryTexture.new(
-        image.width,
-        image.height,
+        width,
+        height,
         Gdk.MemoryFormat.R8G8B8A8,
-        GLib.Bytes.new(image.tobytes()),
-        image.width * 4,
+        glib_bytes,
+        width * 4,
     )
 
     return texture
@@ -306,36 +307,43 @@ def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
 
     clf = get_clf()
 
-    def _sklearn_process(grayscale_image: Image.Image) -> SKLearnResult:
-        grayscale_image_8x8 = grayscale_image.resize((8, 8), Image.Resampling.LANCZOS)
+    def _sklearn_process(grayscale_image: np.ndarray) -> SKLearnResult:
+        grayscale_image_8x8 = cv.resize(
+            grayscale_image, (8, 8), interpolation=cv.INTER_AREA
+        )
+        inverted_grayscale_image_8x8 = np.invert(grayscale_image_8x8)
+
         # convert image data for svm.SCV
-        sk_learn_data = [(~b & 0xFF) / 16.0 for b in grayscale_image_8x8.tobytes()]
+        sk_learn_data = inverted_grayscale_image_8x8 / 16.0
 
         predicted_digit = None
-        if any(f > 0 for f in sk_learn_data):
-            predicted_digit = clf.predict([sk_learn_data])[0]
+        if sk_learn_data.any():
+            predicted_digit = clf.predict(sk_learn_data.reshape(1, -1))[0]
 
         return SKLearnResult(new_preview_image(grayscale_image_8x8), predicted_digit)
 
-    def _tf_process(grayscale_image: Image.Image) -> TFResult:
-        grayscale_image_28x28 = grayscale_image.resize(
-            (28, 28), Image.Resampling.LANCZOS
+    def _tf_process(grayscale_image: np.ndarray) -> TFResult:
+        grayscale_image_28x28 = cv.resize(
+            grayscale_image, (28, 28), interpolation=cv.INTER_AREA
         )
-        # convert image data for tf model
-        tf_data = [(~b & 0xFF) / 255.0 for b in grayscale_image_28x28.tobytes()]
+        inverted_grayscale_image_28x28 = np.invert(grayscale_image_28x28)
 
-        floats = np.array(tf_data).reshape(1, -1, 28)
+        # convert image data for tf model
+        tf_data = inverted_grayscale_image_28x28 / 255.0
+
+        floats = tf_data.reshape(1, -1, 28)
         predicted_digits = predict(floats)
 
         return TFResult(new_preview_image(grayscale_image_28x28), predicted_digits)
 
     # work loop
     while True:
-        task_image: Image.Image | None = conn.recv()
+        # image in format BGRA
+        task_image: np.ndarray | None = conn.recv()
         if task_image is None:
             break
 
-        grayscale_image = task_image.convert("L")
+        grayscale_image = cv.cvtColor(task_image, cv.COLOR_BGRA2GRAY)
 
         # scikit-learn
         sklearn_result = _sklearn_process(grayscale_image)
