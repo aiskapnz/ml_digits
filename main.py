@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import os
 import sys
+from enum import StrEnum
 from multiprocessing import Pipe, Process, connection
 from threading import Thread
 
@@ -45,6 +46,12 @@ from gi.repository import (  # type: ignore[import-not-found]  # noqa: E402
 DIGIT_DISPLAY_TRESHOLD = 0.7
 
 
+class Model(StrEnum):
+    SKLEARN_MODEL = "skl"
+    TF_MODEL = "tf"
+    OV_MODEL = "ov"
+
+
 @Gtk.Template(filename="main_window.ui")
 class MainWindow(Adw.ApplicationWindow):
     __gtype_name__ = "MainWindow"
@@ -57,10 +64,19 @@ class MainWindow(Adw.ApplicationWindow):
     tf_predicted_label: Gtk.Label = Gtk.Template.Child()
     tf_preview_image: Gtk.Image = Gtk.Template.Child()
     tf_digits_display: digits_display.DigitsDisplay = Gtk.Template.Child()
+    tf_openvino_toggle_group: Adw.ToggleGroup = Gtk.Template.Child()
+    tf_toggle: Adw.Toggle = Gtk.Template.Child()
+    ov_toggle: Adw.Toggle = Gtk.Template.Child()
 
     def __init__(self, app: DrawingApp) -> None:
         super().__init__(application=app)
         self.app = app
+
+        self.models_toggles = {
+            Model.SKLEARN_MODEL: True,
+            Model.TF_MODEL: False,
+            Model.OV_MODEL: True,
+        }
 
         self._surface: cairo.ImageSurface | None = None
         self._last_point: tuple[float, float] | None = None
@@ -78,6 +94,11 @@ class MainWindow(Adw.ApplicationWindow):
         drag.connect("drag-end", self._on_drag_end)
         self.drawing_area.add_controller(drag)
 
+        self.tf_openvino_toggle_group.connect(
+            "notify::active", self._on_tf_ov_toggle_activate
+        )
+        self.tf_openvino_toggle_group.set_active(active=self.ov_toggle.get_index())
+
         self.tf_digits_display.set_display_threshold(DIGIT_DISPLAY_TRESHOLD)
 
         self._on_prediction(None)
@@ -87,16 +108,21 @@ class MainWindow(Adw.ApplicationWindow):
         self._result_waiter_thread = Thread(target=self.result_waiter, daemon=True)
         self._result_waiter_thread.start()
 
+    def _on_tf_ov_toggle_activate(self, a, b):
+        index = self.tf_openvino_toggle_group.get_active()
+        self.models_toggles[Model.OV_MODEL] = index == self.ov_toggle.get_index()
+        self.models_toggles[Model.TF_MODEL] = index == self.tf_toggle.get_index()
+
     def do_close_request(self) -> bool:
         self.is_waiting_result = False
         return Adw.ApplicationWindow.do_close_request(self)
 
     def result_waiter(self):
         while self.is_waiting_result:
-            result: tuple[SKLearnResult, TFResult] | None = self.app.worker_conn.recv()
-            if result is None:
+            results: dict | None = self.app.worker_conn.recv()
+            if results is None:
                 break
-            GLib.idle_add(self._on_prediction, result)
+            GLib.idle_add(self._on_prediction, results)
 
     def clear(self):
         if self._surface is None:
@@ -133,19 +159,23 @@ class MainWindow(Adw.ApplicationWindow):
             image = cv.cvtColor(image, cv.COLOR_RGBA2BGRA)
 
             # send image to process
-            self.app.worker_conn.send(image)
+            self.app.worker_conn.send(InferenceTask(image, self.models_toggles))
 
-    def _on_prediction(self, result: tuple[SKLearnResult, TFResult] | None):
+    def _on_prediction(self, results: list[TFOVResult | SKLearnResult] | None):
         self._prediction_pending = False
-        sklearn_result, tf_result = None, None
+        sklearn_result, tf_ov_result = None, None
 
-        if result is not None:
-            sklearn_result, tf_result = result
+        if results is not None:
+            for result in results:
+                if isinstance(result, SKLearnResult):
+                    sklearn_result = result
+                elif isinstance(result, TFOVResult):
+                    tf_ov_result = result
 
         self._on_sklearn_prediction(sklearn_result)
-        self._on_tf_prediction(tf_result)
+        self._on_tf_ov_prediction(tf_ov_result)
 
-    def _on_tf_prediction(self, result: TFResult | None):
+    def _on_tf_ov_prediction(self, result: TFOVResult | None):
         label = "..."
 
         if result is not None:
@@ -259,7 +289,13 @@ class DrawingApp(Adw.Application):
         self.tf_process.join()
 
 
-class TFResult:
+class InferenceTask:
+    def __init__(self, image: np.ndarray, models: dict[Model, bool]):
+        self.image = image
+        self.models = models
+
+
+class TFOVResult:
     def __init__(self, preview_image: np.ndarray, predicted_digits: list[float] | None):
         self.preview_image = preview_image
         self.predicted_digits = predicted_digits
@@ -315,21 +351,15 @@ def new_preview_texture(image: np.ndarray) -> Gdk.MemoryTexture | None:
 
 
 def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
-    if model_engine == "tf":
-        model = get_tf_model()
-
-        def predict(floats):  # pyright: ignore[reportRedeclaration]
-            return model.predict(floats)[0]
-    elif model_engine == "ov":
-        model = get_ov_compiled_model()
-        output_key = model.output(0)
-
-        def predict(floats):
-            return model(floats)[output_key][0]
-    else:
-        return
-
+    tf_model = get_tf_model()
+    ov_model = get_ov_compiled_model()
     clf = get_clf()
+
+    def tf_predict(floats):  # pyright: ignore[reportRedeclaration]
+        return tf_model.predict(floats)[0]
+
+    def ov_predict(floats):
+        return ov_model(floats)[ov_model.output(0)][0]
 
     def _sklearn_process(grayscale_image: np.ndarray) -> SKLearnResult:
         grayscale_image_8x8 = cv.resize(
@@ -347,7 +377,7 @@ def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
             new_preview_image(np.invert(grayscale_image_8x8)), predicted_digit
         )
 
-    def _tf_process(grayscale_image: np.ndarray) -> TFResult:
+    def _tf_ov_process(grayscale_image: np.ndarray, model: str) -> TFOVResult:
         grayscale_image_28x28 = cv.resize(
             grayscale_image, (28, 28), interpolation=cv.INTER_AREA
         )
@@ -357,30 +387,37 @@ def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
         predicted_digits = None
         if tf_data.any():
             floats = tf_data.reshape(1, -1, 28)
-            predicted_digits = predict(floats)
+            if model == Model.TF_MODEL:
+                predicted_digits = tf_predict(floats)
+            elif model == Model.OV_MODEL:
+                predicted_digits = ov_predict(floats)
 
-        return TFResult(
+        return TFOVResult(
             new_preview_image(np.invert(grayscale_image_28x28)), predicted_digits
         )
 
     # work loop
     while True:
-        # image in format BGRA
-        task_image: np.ndarray | None = conn.recv()
-        if task_image is None:
+        task: InferenceTask | None = conn.recv()
+        if task is None:
             break
 
-        grayscale_image = cv.cvtColor(task_image, cv.COLOR_BGRA2GRAY)
+        grayscale_image = cv.cvtColor(task.image, cv.COLOR_BGRA2GRAY)
         grayscale_image = np.invert(grayscale_image)
         grayscale_image = crop_to_content(grayscale_image)
 
-        # scikit-learn
-        sklearn_result = _sklearn_process(grayscale_image)
+        results = []
 
-        # tensor flow (openvino)
-        tf_result = _tf_process(grayscale_image)
+        for model, enabled in task.models.items():
+            if not enabled:
+                continue
 
-        conn.send((sklearn_result, tf_result))
+            if model == Model.SKLEARN_MODEL:
+                results.append(_sklearn_process(grayscale_image))
+            elif model in (Model.TF_MODEL, Model.OV_MODEL):
+                results.append(_tf_ov_process(grayscale_image, model))
+
+        conn.send(results)
 
     conn.send(None)
     conn.close()

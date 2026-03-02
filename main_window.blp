@@ -148,14 +148,17 @@ template $MainWindow: Adw.ApplicationWindow {
             spacing: 12;
             width-request: 300;
 
-            Label {
-              label: _("TensorFlow");
+            Adw.ToggleGroup tf_openvino_toggle_group {
               halign: start;
-              selectable: true;
+              orientation: horizontal;
 
-              styles [
-                "title-3",
-              ]
+              Adw.Toggle tf_toggle {
+                label: "TensorFlow";
+              }
+
+              Adw.Toggle ov_toggle {
+                label: "OpenVINO";
+              }
             }
 
             Label {

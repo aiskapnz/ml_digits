@@ -169,13 +169,19 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
                         <property name="spacing">12</property>
                         <property name="width-request">300</property>
                         <child>
-                          <object class="GtkLabel">
-                            <property name="label" translatable="yes">TensorFlow</property>
+                          <object class="AdwToggleGroup" id="tf_openvino_toggle_group">
                             <property name="halign">1</property>
-                            <property name="selectable">true</property>
-                            <style>
-                              <class name="title-3"/>
-                            </style>
+                            <property name="orientation">0</property>
+                            <child>
+                              <object class="AdwToggle" id="tf_toggle">
+                                <property name="label">TensorFlow</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwToggle" id="ov_toggle">
+                                <property name="label">OpenVINO</property>
+                              </object>
+                            </child>
                           </object>
                         </child>
                         <child>
