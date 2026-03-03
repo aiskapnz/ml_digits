@@ -71,6 +71,8 @@ class MainWindow(Adw.ApplicationWindow):
     sklearn_time_label: Gtk.Label = Gtk.Template.Child()
     tf_ov_time_label: Gtk.Label = Gtk.Template.Child()
 
+    _prediction_pending = False
+
     def __init__(self, app: DrawingApp) -> None:
         super().__init__(application=app)
         self.app = app
@@ -104,17 +106,25 @@ class MainWindow(Adw.ApplicationWindow):
 
         self.tf_digits_display.set_display_threshold(DIGIT_DISPLAY_TRESHOLD)
 
-        self._on_prediction(None)
-        self._prediction_pending = False
-
         self.is_waiting_result = True
         self._result_waiter_thread = Thread(target=self.result_waiter, daemon=True)
         self._result_waiter_thread.start()
 
+        self.update_prediction()
+
     def _on_tf_ov_toggle_activate(self, a, b):
         index = self.tf_openvino_toggle_group.get_active()
-        self.models_toggles[Model.OV_MODEL] = index == self.ov_toggle.get_index()
-        self.models_toggles[Model.TF_MODEL] = index == self.tf_toggle.get_index()
+
+        is_ov_model = index == self.ov_toggle.get_index()
+        self.models_toggles[Model.OV_MODEL] = is_ov_model
+
+        is_tf_model = index == self.tf_toggle.get_index()
+        self.models_toggles[Model.TF_MODEL] = is_tf_model
+
+        if is_ov_model:
+            self.update_prediction([Model.OV_MODEL])
+        elif is_tf_model:
+            self.update_prediction([Model.TF_MODEL])
 
     def do_close_request(self) -> bool:
         self.is_waiting_result = False
@@ -122,7 +132,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def result_waiter(self):
         while self.is_waiting_result:
-            results: dict | None = self.app.worker_conn.recv()
+            results: list | None = self.app.worker_conn.recv()
             if results is None:
                 break
             GLib.idle_add(self._on_prediction, results)
@@ -150,8 +160,13 @@ class MainWindow(Adw.ApplicationWindow):
         image = np.frombuffer(data, dtype=np.uint8).reshape((width, height, 4))
         return image
 
-    def update_prediction(self):
+    def update_prediction(self, models_toggles: list[Model] | None = None):
         if not self._prediction_pending:
+            if models_toggles is None:
+                models_toggles = [
+                    model for model, enabled in self.models_toggles.items() if enabled
+                ]
+
             self._prediction_pending = True
             image = self.get_image()
 
@@ -160,21 +175,21 @@ class MainWindow(Adw.ApplicationWindow):
                 return
 
             # send image to process
-            self.app.worker_conn.send(InferenceTask(image, self.models_toggles))
+            self.app.worker_conn.send(
+                InferenceTask(
+                    image,
+                    models_toggles,
+                )
+            )
 
-    def _on_prediction(self, results: list[TFOVResult | SKLearnResult] | None):
+    def _on_prediction(self, results: list[TFOVResult | SKLearnResult]):
         self._prediction_pending = False
-        sklearn_result, tf_ov_result = None, None
 
-        if results is not None:
-            for result in results:
-                if isinstance(result, SKLearnResult):
-                    sklearn_result = result
-                elif isinstance(result, TFOVResult):
-                    tf_ov_result = result
-
-        self._on_sklearn_prediction(sklearn_result)
-        self._on_tf_ov_prediction(tf_ov_result)
+        for result in results:
+            if isinstance(result, SKLearnResult):
+                self._on_sklearn_prediction(result)
+            elif isinstance(result, TFOVResult):
+                self._on_tf_ov_prediction(result)
 
     def _on_tf_ov_prediction(self, result: TFOVResult | None):
         label = "..."
@@ -298,7 +313,7 @@ class DrawingApp(Adw.Application):
 
 
 class InferenceTask:
-    def __init__(self, image: np.ndarray, models: dict[Model, bool]):
+    def __init__(self, image: np.ndarray, models: list[Model]):
         self.image = image
         self.models = models
 
@@ -446,10 +461,7 @@ def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
 
         results = []
 
-        for model, enabled in task.models.items():
-            if not enabled:
-                continue
-
+        for model in task.models:
             if model == Model.SKLEARN_MODEL:
                 results.append(_sklearn_process(grayscale_image))
             elif model in (Model.TF_MODEL, Model.OV_MODEL):
