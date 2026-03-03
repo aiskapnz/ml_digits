@@ -135,6 +135,14 @@ template $MainWindow: Adw.ApplicationWindow {
                 }
               }
             }
+
+            Label sklearn_time_label {
+              label: _("0 ms");
+              halign: end;
+              valign: end;
+              vexpand: true;
+              selectable: true;
+            }
           }
         }
 
@@ -220,6 +228,14 @@ template $MainWindow: Adw.ApplicationWindow {
             }
 
             $DigitsDisplay tf_digits_display {}
+
+            Label tf_ov_time_label {
+              label: _("0 ms");
+              halign: end;
+              valign: end;
+              vexpand: true;
+              selectable: true;
+            }
           }
         }
       }

@@ -153,6 +153,15 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
                             </child>
                           </object>
                         </child>
+                        <child>
+                          <object class="GtkLabel" id="sklearn_time_label">
+                            <property name="label" translatable="yes">0 ms</property>
+                            <property name="halign">2</property>
+                            <property name="valign">2</property>
+                            <property name="vexpand">true</property>
+                            <property name="selectable">true</property>
+                          </object>
+                        </child>
                       </object>
                     </child>
                   </object>
@@ -249,6 +258,15 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
                         </child>
                         <child>
                           <object class="DigitsDisplay" id="tf_digits_display"></object>
+                        </child>
+                        <child>
+                          <object class="GtkLabel" id="tf_ov_time_label">
+                            <property name="label" translatable="yes">0 ms</property>
+                            <property name="halign">2</property>
+                            <property name="valign">2</property>
+                            <property name="vexpand">true</property>
+                            <property name="selectable">true</property>
+                          </object>
                         </child>
                       </object>
                     </child>

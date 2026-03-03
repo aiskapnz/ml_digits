@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 from enum import StrEnum
 from multiprocessing import Pipe, Process, connection
 from threading import Thread
@@ -67,6 +68,8 @@ class MainWindow(Adw.ApplicationWindow):
     tf_openvino_toggle_group: Adw.ToggleGroup = Gtk.Template.Child()
     tf_toggle: Adw.Toggle = Gtk.Template.Child()
     ov_toggle: Adw.Toggle = Gtk.Template.Child()
+    sklearn_time_label: Gtk.Label = Gtk.Template.Child()
+    tf_ov_time_label: Gtk.Label = Gtk.Template.Child()
 
     def __init__(self, app: DrawingApp) -> None:
         super().__init__(application=app)
@@ -177,6 +180,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _on_tf_ov_prediction(self, result: TFOVResult | None):
         label = "..."
+        inference_time = 0.0
 
         if result is not None:
             preview_texture = new_preview_texture(result.preview_image)
@@ -189,19 +193,25 @@ class MainWindow(Adw.ApplicationWindow):
                 )
                 if value >= DIGIT_DISPLAY_TRESHOLD:
                     label = f"{index}"
+            inference_time = result.inference_time
 
         self.tf_predicted_label.set_label(label)
+        self.tf_ov_time_label.set_label(f"{inference_time:.3f} ms")
 
     def _on_sklearn_prediction(self, result: SKLearnResult | None):
         digit = None
+        inference_time = 0.0
+
         if result is not None:
             digit = result.predicted_digit
             self.sklearn_preview_image.set_from_paintable(
                 new_preview_texture(result.preview_image)
             )
+            inference_time = result.inference_time
 
         label = "..." if digit is None else f"{digit}"
         self.sklearn_predicted_label.set_label(label)
+        self.sklearn_time_label.set_label(f"{inference_time:.3f} ms")
 
     def _draw_line(self, x: float, y: float) -> None:
         if self._surface is None:
@@ -296,15 +306,29 @@ class InferenceTask:
 
 
 class TFOVResult:
-    def __init__(self, preview_image: np.ndarray, predicted_digits: list[float] | None):
+    # inference_time (ms)
+    def __init__(
+        self,
+        preview_image: np.ndarray,
+        predicted_digits: list[float] | None,
+        inference_time: float,
+    ):
         self.preview_image = preview_image
         self.predicted_digits = predicted_digits
+        self.inference_time = inference_time
 
 
 class SKLearnResult:
-    def __init__(self, preview_image: np.ndarray, predicted_digit: int | None):
+    # inference_time (ms)
+    def __init__(
+        self,
+        preview_image: np.ndarray,
+        predicted_digit: int | None,
+        inference_time: float,
+    ):
         self.preview_image = preview_image
         self.predicted_digit = predicted_digit
+        self.inference_time = inference_time
 
 
 def crop_to_content(image: np.ndarray) -> np.ndarray:
@@ -370,11 +394,17 @@ def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
         sk_learn_data = grayscale_image_8x8 / 16.0
 
         predicted_digit = None
+        inference_time = 0.0
         if sk_learn_data.any():
+            start = time.perf_counter()
             predicted_digit = clf.predict(sk_learn_data.reshape(1, -1))[0]
+            end = time.perf_counter()
+            inference_time = (end - start) * 1000
 
         return SKLearnResult(
-            new_preview_image(np.invert(grayscale_image_8x8)), predicted_digit
+            new_preview_image(np.invert(grayscale_image_8x8)),
+            predicted_digit,
+            inference_time,
         )
 
     def _tf_ov_process(grayscale_image: np.ndarray, model: str) -> TFOVResult:
@@ -385,15 +415,25 @@ def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
         # convert image data for tf model
         tf_data = grayscale_image_28x28 / 255.0
         predicted_digits = None
+        inference_time = 0.0
         if tf_data.any():
             floats = tf_data.reshape(1, -1, 28)
             if model == Model.TF_MODEL:
+                start = time.perf_counter()
                 predicted_digits = tf_predict(floats)
+                end = time.perf_counter()
+                inference_time = (end - start) * 1000
+
             elif model == Model.OV_MODEL:
+                start = time.perf_counter()
                 predicted_digits = ov_predict(floats)
+                end = time.perf_counter()
+                inference_time = (end - start) * 1000
 
         return TFOVResult(
-            new_preview_image(np.invert(grayscale_image_28x28)), predicted_digits
+            new_preview_image(np.invert(grayscale_image_28x28)),
+            predicted_digits,
+            inference_time,
         )
 
     # work loop
