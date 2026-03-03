@@ -159,8 +159,6 @@ class MainWindow(Adw.ApplicationWindow):
                 self._prediction_pending = False
                 return
 
-            image = cv.cvtColor(image, cv.COLOR_RGBA2BGRA)
-
             # send image to process
             self.app.worker_conn.send(InferenceTask(image, self.models_toggles))
 
@@ -442,7 +440,7 @@ def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
         if task is None:
             break
 
-        grayscale_image = cv.cvtColor(task.image, cv.COLOR_BGRA2GRAY)
+        grayscale_image = cv.cvtColor(task.image, cv.COLOR_RGBA2GRAY)
         grayscale_image = np.invert(grayscale_image)
         grayscale_image = crop_to_content(grayscale_image)
 
