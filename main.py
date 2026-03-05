@@ -407,9 +407,10 @@ def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
         )
 
         # convert image data for svm.SCV
-        sk_learn_data = grayscale_image_8x8 / 16.0
+        sk_learn_data = grayscale_image_8x8 * 0.062745098  # 16.0 / 255 = 0.062745098
         predicted_digit = None
         inference_time = None
+
         if sk_learn_data.any():
             start = time.perf_counter()
             predicted_digit = clf.predict(sk_learn_data.reshape(1, -1))[0]
@@ -431,6 +432,7 @@ def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
         tf_data = grayscale_image_28x28 / 255.0
         predicted_digits = None
         inference_time = None
+
         if tf_data.any():
             floats = tf_data.reshape(1, -1, 28)
             if model == Model.TF_MODEL:

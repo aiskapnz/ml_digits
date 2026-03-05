@@ -68,10 +68,10 @@ template $MainWindow: Adw.ApplicationWindow {
           spacing: 24;
 
           Adw.Clamp {
-            maximum-size: 300;
+            maximum-size: 350;
 
             Adw.Bin {
-              width-request: 300;
+              width-request: 350;
 
               styles [
                 "card",
@@ -96,7 +96,7 @@ template $MainWindow: Adw.ApplicationWindow {
                 }
 
                 Label {
-                  label: _("A support vector classifier (SVC) has trained on 8x8 4-bit grayscale images dataset (from the sklearn.datasets).");
+                  label: _("A support vector classifier (SVC) has trained on 8x8 (color: grayscale float 0.0-16.0) images dataset (from the sklearn.datasets).");
                   halign: fill;
                   wrap: true;
                   wrap-mode: word;
@@ -198,7 +198,7 @@ template $MainWindow: Adw.ApplicationWindow {
                 }
 
                 Label {
-                  label: _("The model has trained on 28x28 images from MNIST dataset (from keras.datasets).");
+                  label: _("The model has trained on 28x28 (color: grayscale float 0.0-1.0) images from MNIST dataset (from keras.datasets).");
                   halign: fill;
                   wrap: true;
                   wrap-mode: word;
