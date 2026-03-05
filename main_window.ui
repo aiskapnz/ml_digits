@@ -21,8 +21,8 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
           <object class="AdwBin">
             <property name="vexpand">true</property>
             <child>
-              <object class="GtkBox" id="root_box">
-                <property name="orientation">0</property>
+              <object class="GtkBox">
+                <property name="orientation">1</property>
                 <property name="halign">3</property>
                 <property name="valign">3</property>
                 <property name="margin-top">20</property>
@@ -33,14 +33,16 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
                 <child>
                   <object class="GtkBox">
                     <property name="orientation">1</property>
+                    <property name="halign">3</property>
+                    <property name="valign">3</property>
                     <property name="spacing">12</property>
                     <child>
                       <object class="GtkLabel" id="input_label">
                         <property name="label" translatable="yes">Draw a digit</property>
-                        <property name="halign">1</property>
+                        <property name="halign">3</property>
                         <property name="selectable">true</property>
                         <style>
-                          <class name="title-3"/>
+                          <class name="title-1"/>
                         </style>
                       </object>
                     </child>
@@ -53,8 +55,8 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
                           <object class="GtkFrame">
                             <child>
                               <object class="GtkDrawingArea" id="drawing_area">
-                                <property name="width-request">200</property>
-                                <property name="height-request">200</property>
+                                <property name="width-request">220</property>
+                                <property name="height-request">220</property>
                                 <property name="halign">3</property>
                               </object>
                             </child>
@@ -74,198 +76,243 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
                   <object class="GtkSeparator"></object>
                 </child>
                 <child>
-                  <object class="AdwClamp">
-                    <property name="maximum-size">300</property>
+                  <object class="GtkBox">
+                    <property name="orientation">0</property>
+                    <property name="spacing">24</property>
                     <child>
-                      <object class="GtkBox">
-                        <property name="orientation">1</property>
-                        <property name="spacing">12</property>
-                        <property name="width-request">300</property>
+                      <object class="AdwClamp">
+                        <property name="maximum-size">300</property>
                         <child>
-                          <object class="GtkLabel">
-                            <property name="label" translatable="yes">Scikit-learn</property>
-                            <property name="halign">1</property>
-                            <property name="selectable">true</property>
+                          <object class="AdwBin">
+                            <property name="width-request">300</property>
                             <style>
-                              <class name="title-3"/>
+                              <class name="card"/>
                             </style>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="GtkLabel">
-                            <property name="label" translatable="yes">A support vector classifier (SVC) has trained on 8x8 4-bit grayscale images dataset (from the sklearn.datasets).</property>
-                            <property name="halign">0</property>
-                            <property name="wrap">true</property>
-                            <property name="wrap-mode">0</property>
-                            <property name="selectable">true</property>
-                            <property name="justify">3</property>
-                            <style>
-                              <class name="dimmed"/>
-                            </style>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="GtkBox">
-                            <property name="orientation">0</property>
-                            <property name="spacing">12</property>
                             <child>
-                              <object class="AdwBin">
-                                <property name="halign">1</property>
-                                <style>
-                                  <class name="card"/>
-                                </style>
+                              <object class="GtkBox">
+                                <property name="orientation">1</property>
+                                <property name="spacing">12</property>
+                                <property name="margin-top">12</property>
+                                <property name="margin-bottom">12</property>
+                                <property name="margin-start">12</property>
+                                <property name="margin-end">12</property>
                                 <child>
-                                  <object class="GtkFrame">
+                                  <object class="GtkLabel">
+                                    <property name="label" translatable="yes">Scikit-learn</property>
+                                    <property name="halign">1</property>
+                                    <property name="selectable">true</property>
+                                    <style>
+                                      <class name="title-4"/>
+                                    </style>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkLabel">
+                                    <property name="label" translatable="yes">A support vector classifier (SVC) has trained on 8x8 4-bit grayscale images dataset (from the sklearn.datasets).</property>
+                                    <property name="halign">0</property>
+                                    <property name="wrap">true</property>
+                                    <property name="wrap-mode">0</property>
+                                    <property name="selectable">true</property>
+                                    <property name="justify">3</property>
+                                    <style>
+                                      <class name="dimmed"/>
+                                    </style>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkBox">
+                                    <property name="orientation">0</property>
+                                    <property name="spacing">12</property>
                                     <child>
-                                      <object class="GtkImage" id="sklearn_preview_image">
-                                        <property name="width-request">100</property>
-                                        <property name="height-request">100</property>
-                                        <property name="pixel-size">100</property>
+                                      <object class="AdwBin">
+                                        <property name="halign">1</property>
+                                        <child>
+                                          <object class="GtkFrame">
+                                            <child>
+                                              <object class="GtkImage" id="sklearn_preview_image">
+                                                <property name="width-request">100</property>
+                                                <property name="height-request">100</property>
+                                                <property name="pixel-size">100</property>
+                                              </object>
+                                            </child>
+                                          </object>
+                                        </child>
+                                      </object>
+                                    </child>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkBox">
+                                    <property name="orientation">1</property>
+                                    <property name="spacing">6</property>
+                                    <child>
+                                      <object class="GtkLabel">
+                                        <property name="label" translatable="yes">Prediction</property>
+                                        <property name="halign">1</property>
+                                        <style>
+                                          <class name="caption"/>
+                                          <class name="dimmed"/>
+                                        </style>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkLabel" id="sklearn_prediction_label">
+                                        <property name="label" translatable="yes">-</property>
+                                        <property name="halign">1</property>
+                                      </object>
+                                    </child>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkBox">
+                                    <property name="orientation">1</property>
+                                    <property name="spacing">6</property>
+                                    <child>
+                                      <object class="GtkLabel">
+                                        <property name="label" translatable="yes">Inference time</property>
+                                        <property name="halign">1</property>
+                                        <style>
+                                          <class name="caption"/>
+                                          <class name="dimmed"/>
+                                        </style>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkLabel" id="sklearn_time_label">
+                                        <property name="label" translatable="yes">-</property>
+                                        <property name="halign">1</property>
                                       </object>
                                     </child>
                                   </object>
                                 </child>
                               </object>
                             </child>
-                            <child>
-                              <object class="GtkBox">
-                                <property name="orientation">1</property>
-                                <child>
-                                  <object class="GtkLabel">
-                                    <property name="label" translatable="yes">Prediction</property>
-                                    <property name="halign">1</property>
-                                    <property name="selectable">true</property>
-                                    <style>
-                                      <class name="heading"/>
-                                    </style>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="GtkLabel" id="sklearn_predicted_label">
-                                    <property name="halign">1</property>
-                                    <property name="selectable">true</property>
-                                    <style>
-                                      <class name="title-1"/>
-                                    </style>
-                                  </object>
-                                </child>
-                              </object>
-                            </child>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="GtkLabel" id="sklearn_time_label">
-                            <property name="label" translatable="yes">0 ms</property>
-                            <property name="halign">2</property>
-                            <property name="valign">2</property>
-                            <property name="vexpand">true</property>
-                            <property name="selectable">true</property>
                           </object>
                         </child>
                       </object>
                     </child>
-                  </object>
-                </child>
-                <child>
-                  <object class="GtkSeparator"></object>
-                </child>
-                <child>
-                  <object class="AdwClamp">
-                    <property name="maximum-size">300</property>
                     <child>
-                      <object class="GtkBox">
-                        <property name="orientation">1</property>
-                        <property name="spacing">12</property>
-                        <property name="width-request">300</property>
+                      <object class="AdwClamp">
+                        <property name="maximum-size">300</property>
                         <child>
-                          <object class="AdwToggleGroup" id="tf_openvino_toggle_group">
-                            <property name="halign">1</property>
-                            <property name="orientation">0</property>
-                            <child>
-                              <object class="AdwToggle" id="tf_toggle">
-                                <property name="label">TensorFlow</property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="AdwToggle" id="ov_toggle">
-                                <property name="label">OpenVINO</property>
-                              </object>
-                            </child>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="GtkLabel">
-                            <property name="label" translatable="yes">The model has trained on 28x28 images from MNIST dataset (from keras.datasets).</property>
-                            <property name="halign">0</property>
-                            <property name="wrap">true</property>
-                            <property name="wrap-mode">0</property>
-                            <property name="selectable">true</property>
-                            <property name="justify">3</property>
+                          <object class="AdwBin">
                             <style>
-                              <class name="dimmed"/>
+                              <class name="card"/>
                             </style>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="GtkBox">
-                            <property name="orientation">0</property>
-                            <property name="spacing">12</property>
                             <child>
-                              <object class="AdwBin">
-                                <property name="halign">1</property>
-                                <property name="valign">1</property>
-                                <style>
-                                  <class name="card"/>
-                                </style>
+                              <object class="GtkBox">
+                                <property name="orientation">1</property>
+                                <property name="spacing">12</property>
+                                <property name="margin-top">12</property>
+                                <property name="margin-bottom">12</property>
+                                <property name="margin-start">12</property>
+                                <property name="margin-end">12</property>
                                 <child>
-                                  <object class="GtkFrame">
+                                  <object class="AdwToggleGroup" id="tf_openvino_toggle_group">
+                                    <property name="halign">1</property>
+                                    <property name="orientation">0</property>
                                     <child>
-                                      <object class="GtkImage" id="tf_preview_image">
-                                        <property name="width-request">100</property>
-                                        <property name="height-request">100</property>
-                                        <property name="pixel-size">100</property>
+                                      <object class="AdwToggle" id="tf_toggle">
+                                        <property name="label">TensorFlow</property>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="AdwToggle" id="ov_toggle">
+                                        <property name="label">OpenVINO</property>
+                                      </object>
+                                    </child>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkLabel">
+                                    <property name="label" translatable="yes">The model has trained on 28x28 images from MNIST dataset (from keras.datasets).</property>
+                                    <property name="halign">0</property>
+                                    <property name="wrap">true</property>
+                                    <property name="wrap-mode">0</property>
+                                    <property name="selectable">true</property>
+                                    <property name="justify">3</property>
+                                    <style>
+                                      <class name="dimmed"/>
+                                    </style>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkBox">
+                                    <property name="orientation">0</property>
+                                    <property name="spacing">12</property>
+                                    <child>
+                                      <object class="AdwBin">
+                                        <property name="halign">1</property>
+                                        <property name="valign">1</property>
+                                        <child>
+                                          <object class="GtkFrame">
+                                            <child>
+                                              <object class="GtkImage" id="tf_preview_image">
+                                                <property name="width-request">100</property>
+                                                <property name="height-request">100</property>
+                                                <property name="pixel-size">100</property>
+                                              </object>
+                                            </child>
+                                          </object>
+                                        </child>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="DigitsDisplay" id="tf_digits_display">
+                                        <property name="valign">start</property>
+                                        <style>
+                                          <class name="card"/>
+                                        </style>
+                                      </object>
+                                    </child>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkBox">
+                                    <property name="orientation">1</property>
+                                    <property name="spacing">6</property>
+                                    <child>
+                                      <object class="GtkLabel">
+                                        <property name="label" translatable="yes">Prediction</property>
+                                        <property name="halign">1</property>
+                                        <style>
+                                          <class name="caption"/>
+                                          <class name="dimmed"/>
+                                        </style>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkLabel" id="tf_ov_prediction_label">
+                                        <property name="label" translatable="yes">-</property>
+                                        <property name="halign">1</property>
+                                      </object>
+                                    </child>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkBox">
+                                    <property name="orientation">1</property>
+                                    <property name="spacing">6</property>
+                                    <child>
+                                      <object class="GtkLabel">
+                                        <property name="label" translatable="yes">Inference time</property>
+                                        <property name="halign">1</property>
+                                        <style>
+                                          <class name="caption"/>
+                                          <class name="dimmed"/>
+                                        </style>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkLabel" id="tf_ov_time_label">
+                                        <property name="label" translatable="yes">-</property>
+                                        <property name="halign">1</property>
                                       </object>
                                     </child>
                                   </object>
                                 </child>
                               </object>
                             </child>
-                            <child>
-                              <object class="GtkBox">
-                                <property name="orientation">1</property>
-                                <child>
-                                  <object class="GtkLabel">
-                                    <property name="label" translatable="yes">Prediction</property>
-                                    <property name="halign">1</property>
-                                    <property name="selectable">true</property>
-                                    <style>
-                                      <class name="heading"/>
-                                    </style>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="GtkLabel" id="tf_predicted_label">
-                                    <property name="halign">1</property>
-                                    <property name="selectable">true</property>
-                                    <style>
-                                      <class name="title-1"/>
-                                    </style>
-                                  </object>
-                                </child>
-                              </object>
-                            </child>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="DigitsDisplay" id="tf_digits_display"></object>
-                        </child>
-                        <child>
-                          <object class="GtkLabel" id="tf_ov_time_label">
-                            <property name="label" translatable="yes">0 ms</property>
-                            <property name="halign">2</property>
-                            <property name="valign">2</property>
-                            <property name="vexpand">true</property>
-                            <property name="selectable">true</property>
                           </object>
                         </child>
                       </object>

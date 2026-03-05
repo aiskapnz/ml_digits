@@ -56,19 +56,18 @@ class Model(StrEnum):
 @Gtk.Template(filename="main_window.ui")
 class MainWindow(Adw.ApplicationWindow):
     __gtype_name__ = "MainWindow"
-    root_box: Gtk.Box = Gtk.Template.Child()
     input_label: Gtk.Label = Gtk.Template.Child()
     drawing_area: Gtk.DrawingArea = Gtk.Template.Child()
     sklearn_preview_image: Gtk.Image = Gtk.Template.Child()
     clear_button: Gtk.Button = Gtk.Template.Child()
-    sklearn_predicted_label: Gtk.Label = Gtk.Template.Child()
-    tf_predicted_label: Gtk.Label = Gtk.Template.Child()
     tf_preview_image: Gtk.Image = Gtk.Template.Child()
     tf_digits_display: digits_display.DigitsDisplay = Gtk.Template.Child()
     tf_openvino_toggle_group: Adw.ToggleGroup = Gtk.Template.Child()
     tf_toggle: Adw.Toggle = Gtk.Template.Child()
     ov_toggle: Adw.Toggle = Gtk.Template.Child()
+    sklearn_prediction_label: Gtk.Label = Gtk.Template.Child()
     sklearn_time_label: Gtk.Label = Gtk.Template.Child()
+    tf_ov_prediction_label: Gtk.Label = Gtk.Template.Child()
     tf_ov_time_label: Gtk.Label = Gtk.Template.Child()
 
     _prediction_pending = False
@@ -192,8 +191,8 @@ class MainWindow(Adw.ApplicationWindow):
                 self._on_tf_ov_prediction(result)
 
     def _on_tf_ov_prediction(self, result: TFOVResult | None):
-        label = "..."
-        inference_time = 0.0
+        label = "-"
+        inference_time = "-"
 
         if result is not None:
             preview_texture = new_preview_texture(result.preview_image)
@@ -206,25 +205,29 @@ class MainWindow(Adw.ApplicationWindow):
                 )
                 if value >= DIGIT_DISPLAY_TRESHOLD:
                     label = f"{index}"
-            inference_time = result.inference_time
 
-        self.tf_predicted_label.set_label(label)
-        self.tf_ov_time_label.set_label(f"{inference_time:.3f} ms")
+            if result.inference_time is not None:
+                inference_time = f"{result.inference_time:.3f} ms"
+
+        self.tf_ov_prediction_label.set_label(label)
+        self.tf_ov_time_label.set_label(inference_time)
 
     def _on_sklearn_prediction(self, result: SKLearnResult | None):
         digit = None
-        inference_time = 0.0
+        inference_time = "-"
 
         if result is not None:
             digit = result.predicted_digit
             self.sklearn_preview_image.set_from_paintable(
                 new_preview_texture(result.preview_image)
             )
-            inference_time = result.inference_time
 
-        label = "..." if digit is None else f"{digit}"
-        self.sklearn_predicted_label.set_label(label)
-        self.sklearn_time_label.set_label(f"{inference_time:.3f} ms")
+            if result.inference_time is not None:
+                inference_time = f"{result.inference_time:.3f} ms"
+
+        label = "-" if digit is None else f"{digit}"
+        self.sklearn_prediction_label.set_label(label)
+        self.sklearn_time_label.set_label(inference_time)
 
     def _draw_line(self, x: float, y: float) -> None:
         if self._surface is None:
@@ -324,7 +327,7 @@ class TFOVResult:
         self,
         preview_image: np.ndarray,
         predicted_digits: list[float] | None,
-        inference_time: float,
+        inference_time: float | None,
     ):
         self.preview_image = preview_image
         self.predicted_digits = predicted_digits
@@ -337,7 +340,7 @@ class SKLearnResult:
         self,
         preview_image: np.ndarray,
         predicted_digit: int | None,
-        inference_time: float,
+        inference_time: float | None,
     ):
         self.preview_image = preview_image
         self.predicted_digit = predicted_digit
@@ -405,9 +408,8 @@ def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
 
         # convert image data for svm.SCV
         sk_learn_data = grayscale_image_8x8 / 16.0
-
         predicted_digit = None
-        inference_time = 0.0
+        inference_time = None
         if sk_learn_data.any():
             start = time.perf_counter()
             predicted_digit = clf.predict(sk_learn_data.reshape(1, -1))[0]
@@ -428,7 +430,7 @@ def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
         # convert image data for tf model
         tf_data = grayscale_image_28x28 / 255.0
         predicted_digits = None
-        inference_time = 0.0
+        inference_time = None
         if tf_data.any():
             floats = tf_data.reshape(1, -1, 28)
             if model == Model.TF_MODEL:

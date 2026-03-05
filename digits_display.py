@@ -158,14 +158,11 @@ DIGIT_BIT_MATRICES = [
 ]
 
 
-class DigitsDisplay(Gtk.Box):
+class DigitsDisplay(Adw.Bin):
     __gtype_name__ = "DigitsDisplay"
     digits_probs: list[float]
 
     def __init__(self, display_threshold=0.7):
-        self.set_orientation(Gtk.Orientation.HORIZONTAL)
-        self.set_spacing(4)
-
         self.display_threshold = display_threshold
 
         self.w_block = 35
@@ -181,9 +178,7 @@ class DigitsDisplay(Gtk.Box):
         )
         self.drawing_area.set_draw_func(self.on_draw)
 
-        box = Gtk.Box(css_classes=["card"])
-        box.append(Gtk.Frame(child=self.drawing_area))
-        self.append(box)
+        self.set_child(Gtk.Frame(child=self.drawing_area))
 
         manager = Adw.StyleManager.get_default()
         manager.connect("notify::dark", self.on_dark)
