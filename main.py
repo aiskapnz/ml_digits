@@ -37,7 +37,7 @@ import digits_display
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import (  # type: ignore[import-not-found]  # noqa: E402
+from gi.repository import (  # noqa: E402
     Adw,  # pyright: ignore[reportMissingModuleSource]
     Gdk,  # pyright: ignore[reportMissingModuleSource]
     GLib,  # pyright: ignore[reportMissingModuleSource]
