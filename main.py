@@ -27,10 +27,10 @@ from threading import Thread
 import cairo
 import cv2 as cv
 import gi
+import joblib
 import numpy as np
 import openvino as ov
 import tensorflow as tf
-from joblib import load
 from sklearn import svm
 
 import digits_display
@@ -45,6 +45,19 @@ from gi.repository import (  # noqa: E402
 )
 
 DIGIT_DISPLAY_TRESHOLD = 0.7
+
+
+def to_full_path(path: str) -> str:
+    return os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        path,
+    )
+
+
+TF_MODEL_PATH = to_full_path("models/tf_digits.keras")
+OV_MODEL_PATH = to_full_path("models/ov_digits.xml")
+SKLEARN_MODEL_PATH = to_full_path("models/sklearn_digits.joblib")
+DRAWING_CURSOR_PATH = to_full_path("res/pencil-symbolic.png")
 
 
 class Model(StrEnum):
@@ -393,7 +406,7 @@ def new_preview_texture(image: np.ndarray) -> Gdk.MemoryTexture | None:
 def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
     tf_model = get_tf_model()
     ov_model = get_ov_compiled_model()
-    clf = get_clf()
+    clf = get_sklearn_model()
 
     def tf_predict(floats):  # pyright: ignore[reportRedeclaration]
         return tf_model.predict(floats)[0]
@@ -477,31 +490,22 @@ def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
     conn.close()
 
 
-def to_full_path(path: str) -> str:
-    return os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        path,
-    )
-
-
-def get_clf() -> svm.SVC:
-    model_file = to_full_path("models/sk_learn_digits.joblib")
-    return load(model_file)
+def get_sklearn_model() -> svm.SVC:
+    return joblib.load(SKLEARN_MODEL_PATH)
 
 
 def get_tf_model():
-    model_file = to_full_path("models/tf_learn_digits.keras")
-    return tf.keras.models.load_model(model_file)
+    return tf.keras.models.load_model(TF_MODEL_PATH)
 
 
 def get_ov_compiled_model():
     core = ov.Core()
-    model = core.read_model(to_full_path("models/tf_learn_digits.xml"))
+    model = core.read_model(OV_MODEL_PATH)
     return core.compile_model(model=model)
 
 
 def get_drawing_cursor() -> Gdk.Cursor:
-    texture = Gdk.Texture.new_from_filename(to_full_path("res/pencil-symbolic.png"))
+    texture = Gdk.Texture.new_from_filename(DRAWING_CURSOR_PATH)
     return Gdk.Cursor.new_from_texture(texture, 0, 31)
 
 
