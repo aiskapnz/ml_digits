@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import tensorflow as tf
 
 (X_train, y_train), (X_test, y_test) = tf.keras.datasets.mnist.load_data()
@@ -20,6 +22,16 @@ model.compile(
 )
 
 model.fit(X_train, y_train, epochs=10)
-
 probability_model = tf.keras.Sequential([model, tf.keras.layers.Softmax()])
-probability_model.save("./models/tf_learn_digits.keras")
+
+path = Path("./models")
+path.mkdir(parents=True, exist_ok=True)
+probability_model.save(f"{path.absolute()}/tf_digits.keras")
+
+# Converting to openvino model
+
+# In case of "NameError: name 'tensorflow' is not defined":
+# comment out the "exec("del tensorflow")" in
+# the file ".../site-packages/openvino/frontend/tensorflow/utils.py" at line 93, in get_environment_setup
+
+probability_model.export(f"{path.absolute()}/ov_digits.xml", format="openvino")
