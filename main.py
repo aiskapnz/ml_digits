@@ -20,6 +20,7 @@ from __future__ import annotations
 import os
 import sys
 import time
+from dataclasses import dataclass
 from enum import StrEnum
 from multiprocessing import Pipe, Process, connection
 from threading import Thread
@@ -44,8 +45,6 @@ from gi.repository import (  # noqa: E402
     Gtk,  # pyright: ignore[reportMissingModuleSource]
 )
 
-DIGIT_DISPLAY_TRESHOLD = 0.7
-
 
 def to_full_path(path: str) -> str:
     return os.path.join(
@@ -59,6 +58,8 @@ OV_MODEL_PATH = to_full_path("models/ov_digits.xml")
 SKLEARN_MODEL_PATH = to_full_path("models/sklearn_digits.joblib")
 DRAWING_CURSOR_PATH = to_full_path("res/pencil-symbolic.png")
 
+DIGIT_DISPLAY_THRESHOLD = 0.7
+
 
 class Model(StrEnum):
     SKLEARN_MODEL = "skl"
@@ -69,17 +70,18 @@ class Model(StrEnum):
 @Gtk.Template(filename="main_window.ui")
 class MainWindow(Adw.ApplicationWindow):
     __gtype_name__ = "MainWindow"
+
     input_label: Gtk.Label = Gtk.Template.Child()
     drawing_area: Gtk.DrawingArea = Gtk.Template.Child()
-    sklearn_preview_image: Gtk.Image = Gtk.Template.Child()
     clear_button: Gtk.Button = Gtk.Template.Child()
-    tf_preview_image: Gtk.Image = Gtk.Template.Child()
-    tf_digits_display: digits_display.DigitsDisplay = Gtk.Template.Child()
-    tf_openvino_toggle_group: Adw.ToggleGroup = Gtk.Template.Child()
-    tf_toggle: Adw.Toggle = Gtk.Template.Child()
-    ov_toggle: Adw.Toggle = Gtk.Template.Child()
+    sklearn_preview_image: Gtk.Image = Gtk.Template.Child()
     sklearn_prediction_label: Gtk.Label = Gtk.Template.Child()
     sklearn_time_label: Gtk.Label = Gtk.Template.Child()
+    tf_ov_toggle_group: Adw.ToggleGroup = Gtk.Template.Child()
+    tf_toggle: Adw.Toggle = Gtk.Template.Child()
+    ov_toggle: Adw.Toggle = Gtk.Template.Child()
+    tf_preview_image: Gtk.Image = Gtk.Template.Child()
+    tf_digits_display: digits_display.DigitsDisplay = Gtk.Template.Child()
     tf_ov_prediction_label: Gtk.Label = Gtk.Template.Child()
     tf_ov_time_label: Gtk.Label = Gtk.Template.Child()
 
@@ -87,6 +89,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def __init__(self, app: DrawingApp) -> None:
         super().__init__(application=app)
+
         self.app = app
 
         self.models_toggles = {
@@ -111,12 +114,12 @@ class MainWindow(Adw.ApplicationWindow):
         drag.connect("drag-end", self._on_drag_end)
         self.drawing_area.add_controller(drag)
 
-        self.tf_openvino_toggle_group.connect(
+        self.tf_ov_toggle_group.connect(
             "notify::active", self._on_tf_ov_toggle_activate
         )
-        self.tf_openvino_toggle_group.set_active(active=self.ov_toggle.get_index())
+        self.tf_ov_toggle_group.set_active(active=self.ov_toggle.get_index())
 
-        self.tf_digits_display.set_display_threshold(DIGIT_DISPLAY_TRESHOLD)
+        self.tf_digits_display.set_display_threshold(DIGIT_DISPLAY_THRESHOLD)
 
         self.is_waiting_result = True
         self._result_waiter_thread = Thread(target=self.result_waiter, daemon=True)
@@ -124,32 +127,32 @@ class MainWindow(Adw.ApplicationWindow):
 
         self.update_prediction()
 
-    def _on_tf_ov_toggle_activate(self, a, b):
-        index = self.tf_openvino_toggle_group.get_active()
-
-        is_ov_model = index == self.ov_toggle.get_index()
-        self.models_toggles[Model.OV_MODEL] = is_ov_model
-
-        is_tf_model = index == self.tf_toggle.get_index()
-        self.models_toggles[Model.TF_MODEL] = is_tf_model
-
-        if is_ov_model:
-            self.update_prediction([Model.OV_MODEL])
-        elif is_tf_model:
-            self.update_prediction([Model.TF_MODEL])
-
     def do_close_request(self) -> bool:
         self.is_waiting_result = False
         return Adw.ApplicationWindow.do_close_request(self)
 
-    def result_waiter(self):
+    def _on_tf_ov_toggle_activate(self, *_args):
+        index = self.tf_ov_toggle_group.get_active()
+
+        if index == self.ov_toggle.get_index():
+            self.models_toggles[Model.OV_MODEL] = True
+            self.update_prediction([Model.OV_MODEL])
+        elif index == self.tf_toggle.get_index():
+            self.models_toggles[Model.TF_MODEL] = True
+            self.update_prediction([Model.TF_MODEL])
+
+    def result_waiter(self) -> None:
         while self.is_waiting_result:
-            results: list | None = self.app.worker_conn.recv()
+            results: list[TFOVResult | SKLearnResult] | None = (
+                self.app.worker_conn.recv()
+            )
+
             if results is None:
                 break
+
             GLib.idle_add(self._on_prediction, results)
 
-    def clear(self):
+    def clear(self) -> None:
         if self._surface is None:
             return
 
@@ -164,7 +167,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def get_image(self) -> np.ndarray | None:
         if self._surface is None:
-            return
+            return None
 
         width = self._surface.get_width()
         height = self._surface.get_height()
@@ -204,7 +207,7 @@ class MainWindow(Adw.ApplicationWindow):
                 self._on_tf_ov_prediction(result)
 
     def _on_tf_ov_prediction(self, result: TFOVResult | None):
-        label = "-"
+        prediction = "-"
         inference_time = "-"
 
         if result is not None:
@@ -216,30 +219,31 @@ class MainWindow(Adw.ApplicationWindow):
                 index, value = max(
                     enumerate(result.predicted_digits), key=lambda iv: iv[1]
                 )
-                if value >= DIGIT_DISPLAY_TRESHOLD:
-                    label = f"{index}"
+                if value >= DIGIT_DISPLAY_THRESHOLD:
+                    prediction = f"{index}"
 
             if result.inference_time is not None:
                 inference_time = f"{result.inference_time:.3f} ms"
 
-        self.tf_ov_prediction_label.set_label(label)
+        self.tf_ov_prediction_label.set_label(prediction)
         self.tf_ov_time_label.set_label(inference_time)
 
     def _on_sklearn_prediction(self, result: SKLearnResult | None):
-        digit = None
+        prediction = "-"
         inference_time = "-"
 
         if result is not None:
-            digit = result.predicted_digit
             self.sklearn_preview_image.set_from_paintable(
                 new_preview_texture(result.preview_image)
             )
 
+            if result.predicted_digit is not None:
+                prediction = f"{result.predicted_digit}"
+
             if result.inference_time is not None:
                 inference_time = f"{result.inference_time:.3f} ms"
 
-        label = "-" if digit is None else f"{digit}"
-        self.sklearn_prediction_label.set_label(label)
+        self.sklearn_prediction_label.set_label(prediction)
         self.sklearn_time_label.set_label(inference_time)
 
     def _draw_line(self, x: float, y: float) -> None:
@@ -281,16 +285,6 @@ class MainWindow(Adw.ApplicationWindow):
         self._last_point = None
         self.update_prediction()
 
-    def _on_clear(self, user_data):
-        self.clear()
-
-    def _on_resize(self, _area: Gtk.DrawingArea, width: int, height: int) -> None:
-        if width <= 0 or height <= 0:
-            return
-
-        self._surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
-        self.clear()
-
     def _on_draw(
         self,
         _area: Gtk.DrawingArea,
@@ -304,6 +298,36 @@ class MainWindow(Adw.ApplicationWindow):
         context.set_source_surface(self._surface, 0, 0)
         context.paint()
 
+    def _on_clear(self, user_data):
+        self.clear()
+
+    def _on_resize(self, _area: Gtk.DrawingArea, width: int, height: int) -> None:
+        if width <= 0 or height <= 0:
+            return
+
+        self._surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
+        self.clear()
+
+
+@dataclass
+class InferenceTask:
+    image: np.ndarray
+    models: list[Model]
+
+
+@dataclass
+class TFOVResult:
+    preview_image: np.ndarray
+    predicted_digits: list[float] | None
+    inference_time: float | None  # inference_time in ms
+
+
+@dataclass
+class SKLearnResult:
+    preview_image: np.ndarray
+    predicted_digit: int | None
+    inference_time: float | None  # inference_time in ms
+
 
 class DrawingApp(Adw.Application):
     def __init__(self) -> None:
@@ -312,8 +336,8 @@ class DrawingApp(Adw.Application):
 
         parent_conn, child_conn = Pipe()
         self.worker_conn = parent_conn
-        self.tf_process = Process(target=run_tf_worker, args=(child_conn, "ov"))
-        self.tf_process.start()
+        self.worker_process = Process(target=run_worker, args=(child_conn,))
+        self.worker_process.start()
 
         self.main_window = None
 
@@ -325,88 +349,13 @@ class DrawingApp(Adw.Application):
 
     def on_shutdown(self, _data):
         self.worker_conn.send(None)
-        self.tf_process.join()
+        self.worker_process.join()
 
 
-class InferenceTask:
-    def __init__(self, image: np.ndarray, models: list[Model]):
-        self.image = image
-        self.models = models
-
-
-class TFOVResult:
-    # inference_time (ms)
-    def __init__(
-        self,
-        preview_image: np.ndarray,
-        predicted_digits: list[float] | None,
-        inference_time: float | None,
-    ):
-        self.preview_image = preview_image
-        self.predicted_digits = predicted_digits
-        self.inference_time = inference_time
-
-
-class SKLearnResult:
-    # inference_time (ms)
-    def __init__(
-        self,
-        preview_image: np.ndarray,
-        predicted_digit: int | None,
-        inference_time: float | None,
-    ):
-        self.preview_image = preview_image
-        self.predicted_digit = predicted_digit
-        self.inference_time = inference_time
-
-
-def crop_to_content(image: np.ndarray) -> np.ndarray:
-    if not image.any():
-        return image
-
-    cropped_image = np.trim_zeros(image)
-    columns, rows = cropped_image.shape
-    min_size = 28
-    size = max(min_size, columns, rows)
-    pad = int(size * 0.2)
-
-    delta_columns = size - columns + pad
-    left = delta_columns // 2
-    right = delta_columns - left
-
-    delta_rows = size - rows + pad
-    top = delta_rows // 2
-    bottom = delta_rows - top
-
-    return np.pad(cropped_image, ((left, right), (top, bottom)))
-
-
-def new_preview_image(image: np.ndarray) -> np.ndarray:
-    """Image should be in grayscale format"""
-    image = cv.resize(image, (100, 100), interpolation=cv.INTER_AREA)
-    image = cv.cvtColor(image, cv.COLOR_GRAY2RGBA)
-    return image
-
-
-def new_preview_texture(image: np.ndarray) -> Gdk.MemoryTexture | None:
-    width, height, _ = image.shape
-    image_bytes = image.tobytes()
-    glib_bytes = GLib.Bytes.new(image_bytes)
-    texture = Gdk.MemoryTexture.new(
-        width,
-        height,
-        Gdk.MemoryFormat.R8G8B8A8,
-        glib_bytes,
-        width * 4,
-    )
-
-    return texture
-
-
-def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
+def run_worker(conn: connection.Connection) -> None:
     tf_model = get_tf_model()
     ov_model = get_ov_compiled_model()
-    clf = get_sklearn_model()
+    sklearn_model = get_sklearn_model()
 
     def tf_predict(floats):  # pyright: ignore[reportRedeclaration]
         return tf_model.predict(floats)[0]
@@ -420,14 +369,15 @@ def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
         )
 
         # convert image data for svm.SCV
-        sk_learn_data = grayscale_image_8x8 * 0.062745098  # 16.0 / 255 = 0.062745098
+        sklearn_data = grayscale_image_8x8 * 0.062745098  # 16.0 / 255.0 = 0.062745098
         predicted_digit = None
         inference_time = None
 
-        if sk_learn_data.any():
+        if sklearn_data.any():
             start = time.perf_counter()
-            predicted_digit = clf.predict(sk_learn_data.reshape(1, -1))[0]
+            predicted_digit = sklearn_model.predict(sklearn_data.reshape(1, -1))[0]
             end = time.perf_counter()
+
             inference_time = (end - start) * 1000
 
         return SKLearnResult(
@@ -436,7 +386,7 @@ def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
             inference_time,
         )
 
-    def _tf_ov_process(grayscale_image: np.ndarray, model: str) -> TFOVResult:
+    def _tf_ov_process(grayscale_image: np.ndarray, model: Model) -> TFOVResult:
         grayscale_image_28x28 = cv.resize(
             grayscale_image, (28, 28), interpolation=cv.INTER_AREA
         )
@@ -448,17 +398,20 @@ def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
 
         if tf_data.any():
             floats = tf_data.reshape(1, -1, 28)
-            if model == Model.TF_MODEL:
-                start = time.perf_counter()
-                predicted_digits = tf_predict(floats)
-                end = time.perf_counter()
-                inference_time = (end - start) * 1000
+            predictors = {
+                Model.TF_MODEL: tf_predict,
+                Model.OV_MODEL: ov_predict,
+            }
 
-            elif model == Model.OV_MODEL:
-                start = time.perf_counter()
-                predicted_digits = ov_predict(floats)
-                end = time.perf_counter()
-                inference_time = (end - start) * 1000
+            predict_fn = predictors.get(model)
+            if predict_fn is None:
+                raise ValueError(f"Unknown model: {model}")
+
+            start = time.perf_counter()
+            predicted_digits = predict_fn(floats)
+            end = time.perf_counter()
+
+            inference_time = (end - start) * 1000
 
         return TFOVResult(
             new_preview_image(np.invert(grayscale_image_28x28)),
@@ -477,7 +430,6 @@ def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
         grayscale_image = crop_to_content(grayscale_image)
 
         results = []
-
         for model in task.models:
             if model == Model.SKLEARN_MODEL:
                 results.append(_sklearn_process(grayscale_image))
@@ -490,23 +442,71 @@ def run_tf_worker(conn: connection.Connection, model_engine: str = "ov"):
     conn.close()
 
 
-def get_sklearn_model() -> svm.SVC:
-    return joblib.load(SKLEARN_MODEL_PATH)
+def crop_to_content(image: np.ndarray) -> np.ndarray:
+    """Crop to non-zero content and pad to a square with margin."""
+
+    if not image.any():
+        return image
+
+    cropped_image = np.trim_zeros(image)
+    columns, rows = cropped_image.shape
+    side = max(28, columns, rows)  # min side: 28
+    pad = int(side * 0.2)
+
+    delta_columns = side - columns + pad
+    left = delta_columns // 2
+    right = delta_columns - left
+
+    delta_rows = side - rows + pad
+    top = delta_rows // 2
+    bottom = delta_rows - top
+
+    return np.pad(cropped_image, ((left, right), (top, bottom)))
 
 
-def get_tf_model():
-    return tf.keras.models.load_model(TF_MODEL_PATH)
+def new_preview_image(image: np.ndarray) -> np.ndarray:
+    """Create a resized RGBA preview image from a grayscale input."""
+    """Image should be in grayscale format."""
+
+    image = cv.resize(image, (100, 100), interpolation=cv.INTER_AREA)
+    image = cv.cvtColor(image, cv.COLOR_GRAY2RGBA)
+    return image
 
 
-def get_ov_compiled_model():
-    core = ov.Core()
-    model = core.read_model(OV_MODEL_PATH)
-    return core.compile_model(model=model)
+def new_preview_texture(image: np.ndarray) -> Gdk.MemoryTexture | None:
+    """Create a Gdk.MemoryTexture from an RGBA numpy image array."""
+
+    width, height, _ = image.shape
+    image_bytes = image.tobytes()
+    glib_bytes = GLib.Bytes.new(image_bytes)
+    texture = Gdk.MemoryTexture.new(
+        width,
+        height,
+        Gdk.MemoryFormat.R8G8B8A8,
+        glib_bytes,
+        width * 4,
+    )
+
+    return texture
 
 
 def get_drawing_cursor() -> Gdk.Cursor:
     texture = Gdk.Texture.new_from_filename(DRAWING_CURSOR_PATH)
     return Gdk.Cursor.new_from_texture(texture, 0, 31)
+
+
+def get_sklearn_model() -> svm.SVC:
+    return joblib.load(SKLEARN_MODEL_PATH)
+
+
+def get_tf_model() -> tf.keras.Model:
+    return tf.keras.models.load_model(TF_MODEL_PATH)
+
+
+def get_ov_compiled_model() -> ov.CompiledModel:
+    core = ov.Core()
+    model = core.read_model(OV_MODEL_PATH)
+    return core.compile_model(model=model)
 
 
 def main() -> None:

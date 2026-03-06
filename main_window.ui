@@ -208,7 +208,7 @@ corresponding .blp file and regenerate this file with blueprint-compiler.
                                 <property name="margin-start">12</property>
                                 <property name="margin-end">12</property>
                                 <child>
-                                  <object class="AdwToggleGroup" id="tf_openvino_toggle_group">
+                                  <object class="AdwToggleGroup" id="tf_ov_toggle_group">
                                     <property name="halign">1</property>
                                     <property name="orientation">0</property>
                                     <child>
