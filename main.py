@@ -134,11 +134,12 @@ class MainWindow(Adw.ApplicationWindow):
     def _on_tf_ov_toggle_activate(self, *_args):
         index = self.tf_ov_toggle_group.get_active()
 
-        if index == self.ov_toggle.get_index():
-            self.models_toggles[Model.OV_MODEL] = True
+        self.models_toggles[Model.OV_MODEL] = index == self.ov_toggle.get_index()
+        self.models_toggles[Model.TF_MODEL] = index == self.tf_toggle.get_index()
+
+        if self.models_toggles[Model.OV_MODEL]:
             self.update_prediction([Model.OV_MODEL])
-        elif index == self.tf_toggle.get_index():
-            self.models_toggles[Model.TF_MODEL] = True
+        elif self.models_toggles[Model.TF_MODEL]:
             self.update_prediction([Model.TF_MODEL])
 
     def result_waiter(self) -> None:
