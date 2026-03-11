@@ -44,8 +44,6 @@ V_MARGIN = CELL_SIZE[1] * 2
 H_SPACING = CELL_SIZE[0] * 2
 V_SPACING = CELL_SIZE[1]
 
-DIGIT_BIT_MATRIX_WIDTH = 5
-
 
 D0_BIT_MATRIX = (
     (0, 1, 1, 1, 0),
@@ -165,6 +163,8 @@ class DigitsDisplay(Adw.Bin):
     __gtype_name__ = "DigitsDisplay"
 
     probabilities: list[float]
+    digits_coordinates: list[list[tuple[float, float]]]
+    bars_coordinates: list[list[tuple[float, float]]]
 
     def __init__(self, display_threshold=0.7):
         self.display_threshold = display_threshold
@@ -173,6 +173,7 @@ class DigitsDisplay(Adw.Bin):
         self.w_cell, self.h_cell = CELL_SIZE
         self.pixel_size = PIXEL_SIZE
 
+        self.update_coordinates()
         self.reset_probabilities()
 
         self.drawing_area = Gtk.DrawingArea(
@@ -210,31 +211,17 @@ class DigitsDisplay(Adw.Bin):
             if d_probability >= self.display_threshold:
                 color = plt.on_pixel_color
 
-            # draw a digit
-            left = H_MARGIN + digit * (self.w_block + H_SPACING)
-            y = V_MARGIN
-            for row in DIGIT_BIT_MATRICES[digit]:
-                x = left
-                for pixel in row:
-                    if pixel == 1:
-                        draw_pixel(cr, x, y, self.pixel_size, color)
-                    x += self.w_cell
+            for x, y in self.digits_coordinates[digit]:
+                draw_pixel(cr, x, y, self.pixel_size, color)
 
-                y += self.h_cell
-
-            # draw a probability bar
-            x = left
-            y += V_SPACING
-            for i in range(DIGIT_BIT_MATRIX_WIDTH):
+            for i in range(BLOCK_H_CELLS):
                 color = plt.off_pixel_color
                 # not display for values under 0.1
-                if d_probability > 0.1 and (
-                    d_probability >= i / DIGIT_BIT_MATRIX_WIDTH
-                ):
+                if d_probability > 0.1 and (d_probability >= i / BLOCK_H_CELLS):
                     color = plt.on_pixel_color
 
+                x, y = self.bars_coordinates[digit][i]
                 draw_pixel(cr, x, y, self.pixel_size, color)
-                x += self.w_cell
 
     def redraw(self):
         self.drawing_area.queue_draw()
@@ -259,6 +246,39 @@ class DigitsDisplay(Adw.Bin):
         """Reset the probabilities for each digit display to 0.0"""
 
         self.probabilities = [0.0] * 10
+
+    def update_coordinates(self):
+        digits_coordinates = []
+        bars_coordinates = []
+
+        for digit in range(10):
+            d_coordinates = []
+            bar_coordinates = []
+
+            # coordinates of a digit
+            left = H_MARGIN + digit * (self.w_block + H_SPACING)
+            y = V_MARGIN
+            for row in DIGIT_BIT_MATRICES[digit]:
+                x = left
+                for pixel in row:
+                    if pixel == 1:
+                        d_coordinates.append((x, y))
+                    x += self.w_cell
+
+                y += self.h_cell
+
+            # coordinates of a probability bar
+            x = left
+            y += V_SPACING
+            for _ in range(BLOCK_H_CELLS):
+                bar_coordinates.append((x, y))
+                x += self.w_cell
+
+            digits_coordinates.append(d_coordinates)
+            bars_coordinates.append(bar_coordinates)
+
+        self.digits_coordinates = digits_coordinates
+        self.bars_coordinates = bars_coordinates
 
     def set_palette(self, dark: bool):
         """Set the palette based on whether dark mode is enabled"""
