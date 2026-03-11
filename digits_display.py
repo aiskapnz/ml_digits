@@ -34,9 +34,15 @@ DEFAULT_DARK_PALETTE = ScreenPalette("#222b00", "#3a4600", "#8d9e4c")
 DEFAULT_LIGHT_PALETTE = ScreenPalette("#3a4600", "#546201", "#ecffaa")
 
 # The block = digit + probability bar + spacing.
-BLOCK_SIZE = (35.0, 55.0)
-BLOCK_H_CELLS = 7
-BLOCK_V_CELLS = 11
+BLOCK_H_CELLS = 5
+BLOCK_V_CELLS = 9
+CELL_SIZE = (4, 4)
+PIXEL_SIZE = (CELL_SIZE[0] * 0.8, CELL_SIZE[1] * 0.8)
+BLOCK_SIZE = (BLOCK_H_CELLS * CELL_SIZE[0], BLOCK_V_CELLS * CELL_SIZE[1])
+H_MARGIN = CELL_SIZE[0] * 2
+V_MARGIN = CELL_SIZE[1] * 2
+H_SPACING = CELL_SIZE[0] * 2
+V_SPACING = CELL_SIZE[1]
 
 DIGIT_BIT_MATRIX_WIDTH = 5
 
@@ -164,15 +170,14 @@ class DigitsDisplay(Adw.Bin):
         self.display_threshold = display_threshold
 
         self.w_block, self.h_block = BLOCK_SIZE
-        self.w_cell = self.w_block / BLOCK_H_CELLS
-        self.h_cell = self.h_block / BLOCK_V_CELLS
-        self.pixel_size = (self.w_cell * 0.8, self.h_cell * 0.8)
+        self.w_cell, self.h_cell = CELL_SIZE
+        self.pixel_size = PIXEL_SIZE
 
         self.reset_probabilities()
 
         self.drawing_area = Gtk.DrawingArea(
-            width_request=int(self.w_block * 10 + self.w_cell * 2),
-            height_request=int(self.h_block + self.h_cell * 2),
+            width_request=int((self.w_block + H_SPACING) * 10 + H_MARGIN),
+            height_request=int(self.h_block + V_MARGIN * 2),
         )
         self.drawing_area.set_draw_func(self.on_draw)
 
@@ -198,9 +203,7 @@ class DigitsDisplay(Adw.Bin):
         cr.set_source_rgb(plt.bg_color.red, plt.bg_color.green, plt.bg_color.blue)
         cr.paint()
 
-        y_offset = self.h_cell * 2
         for digit in range(10):
-            x_offset = digit * self.w_block + self.w_cell
             color = plt.off_pixel_color
 
             d_probability = self.probabilities[digit]
@@ -208,8 +211,8 @@ class DigitsDisplay(Adw.Bin):
                 color = plt.on_pixel_color
 
             # draw a digit
-            left = x_offset + self.w_cell
-            y = y_offset
+            left = H_MARGIN + digit * (self.w_block + H_SPACING)
+            y = V_MARGIN
             for row in DIGIT_BIT_MATRICES[digit]:
                 x = left
                 for pixel in row:
@@ -221,7 +224,7 @@ class DigitsDisplay(Adw.Bin):
 
             # draw a probability bar
             x = left
-            y += self.h_cell
+            y += V_SPACING
             for i in range(DIGIT_BIT_MATRIX_WIDTH):
                 color = plt.off_pixel_color
                 # not display for values under 0.1
