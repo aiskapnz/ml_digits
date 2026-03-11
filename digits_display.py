@@ -17,134 +17,131 @@ class ScreenPalette:
         off_pixel_color: Gdk.RGBA | str,
         on_pixel_color: Gdk.RGBA | str,
     ):
-        if isinstance(bg_color, str):
-            parsed_color = Gdk.RGBA()
-            parsed_color.parse(bg_color)
-            bg_color = parsed_color
+        def _to_rgba(value: Gdk.RGBA | str) -> Gdk.RGBA:
+            if isinstance(value, str):
+                parsed_color = Gdk.RGBA()
+                parsed_color.parse(value)
+                return parsed_color
 
-        self.bg_color = bg_color
+            return value
 
-        if isinstance(off_pixel_color, str):
-            parsed_color = Gdk.RGBA()
-            parsed_color.parse(off_pixel_color)
-            off_pixel_color = parsed_color
-
-        self.off_pixel_color = off_pixel_color
-
-        if isinstance(on_pixel_color, str):
-            parsed_color = Gdk.RGBA()
-            parsed_color.parse(on_pixel_color)
-            on_pixel_color = parsed_color
-
-        self.on_pixel_color = on_pixel_color
+        self.bg_color = _to_rgba(bg_color)
+        self.off_pixel_color = _to_rgba(off_pixel_color)
+        self.on_pixel_color = _to_rgba(on_pixel_color)
 
 
 DEFAULT_DARK_PALETTE = ScreenPalette("#222b00", "#3a4600", "#8d9e4c")
 DEFAULT_LIGHT_PALETTE = ScreenPalette("#3a4600", "#546201", "#ecffaa")
 
+# The block = digit + probability bar + spacing.
+BLOCK_SIZE = (35.0, 55.0)
+BLOCK_H_CELLS = 7
+BLOCK_V_CELLS = 11
+
 DIGIT_BIT_MATRIX_WIDTH = 5
 
-D0_BIT_MATRIX = [
-    [0, 1, 1, 1, 0],
-    [1, 0, 0, 0, 1],
-    [1, 0, 0, 1, 1],
-    [1, 0, 1, 0, 1],
-    [1, 1, 0, 0, 1],
-    [1, 0, 0, 0, 1],
-    [0, 1, 1, 1, 0],
-]
 
-D1_BIT_MATRIX = [
-    [0, 0, 0, 1, 0],
-    [0, 0, 1, 1, 0],
-    [0, 1, 0, 1, 0],
-    [0, 0, 0, 1, 0],
-    [0, 0, 0, 1, 0],
-    [0, 0, 0, 1, 0],
-    [0, 0, 0, 1, 0],
-]
+D0_BIT_MATRIX = (
+    (0, 1, 1, 1, 0),
+    (1, 0, 0, 0, 1),
+    (1, 0, 0, 1, 1),
+    (1, 0, 1, 0, 1),
+    (1, 1, 0, 0, 1),
+    (1, 0, 0, 0, 1),
+    (0, 1, 1, 1, 0),
+)
 
-D2_BIT_MATRIX = [
-    [0, 1, 1, 1, 0],
-    [1, 0, 0, 0, 1],
-    [0, 0, 0, 0, 1],
-    [0, 0, 0, 1, 0],
-    [0, 0, 1, 0, 0],
-    [0, 1, 0, 0, 0],
-    [1, 1, 1, 1, 1],
-]
+D1_BIT_MATRIX = (
+    (0, 0, 0, 1, 0),
+    (0, 0, 1, 1, 0),
+    (0, 1, 0, 1, 0),
+    (0, 0, 0, 1, 0),
+    (0, 0, 0, 1, 0),
+    (0, 0, 0, 1, 0),
+    (0, 0, 0, 1, 0),
+)
 
-D3_BIT_MATRIX = [
-    [0, 1, 1, 1, 0],
-    [1, 0, 0, 0, 1],
-    [0, 0, 0, 0, 1],
-    [0, 0, 1, 1, 0],
-    [0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 1],
-    [0, 1, 1, 1, 0],
-]
+D2_BIT_MATRIX = (
+    (0, 1, 1, 1, 0),
+    (1, 0, 0, 0, 1),
+    (0, 0, 0, 0, 1),
+    (0, 0, 0, 1, 0),
+    (0, 0, 1, 0, 0),
+    (0, 1, 0, 0, 0),
+    (1, 1, 1, 1, 1),
+)
 
-D4_BIT_MATRIX = [
-    [0, 0, 0, 1, 1],
-    [0, 0, 1, 0, 1],
-    [0, 1, 0, 0, 1],
-    [1, 0, 0, 0, 1],
-    [1, 1, 1, 1, 1],
-    [0, 0, 0, 0, 1],
-    [0, 0, 0, 0, 1],
-]
+D3_BIT_MATRIX = (
+    (0, 1, 1, 1, 0),
+    (1, 0, 0, 0, 1),
+    (0, 0, 0, 0, 1),
+    (0, 0, 1, 1, 0),
+    (0, 0, 0, 0, 1),
+    (1, 0, 0, 0, 1),
+    (0, 1, 1, 1, 0),
+)
 
-D5_BIT_MATRIX = [
-    [1, 1, 1, 1, 1],
-    [1, 0, 0, 0, 0],
-    [1, 0, 0, 0, 0],
-    [1, 1, 1, 1, 0],
-    [0, 0, 0, 0, 1],
-    [0, 0, 0, 0, 1],
-    [1, 1, 1, 1, 0],
-]
+D4_BIT_MATRIX = (
+    (0, 0, 0, 1, 1),
+    (0, 0, 1, 0, 1),
+    (0, 1, 0, 0, 1),
+    (1, 0, 0, 0, 1),
+    (1, 1, 1, 1, 1),
+    (0, 0, 0, 0, 1),
+    (0, 0, 0, 0, 1),
+)
 
-D6_BIT_MATRIX = [
-    [0, 1, 1, 1, 0],
-    [1, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0],
-    [1, 1, 1, 1, 0],
-    [1, 0, 0, 0, 1],
-    [1, 0, 0, 0, 1],
-    [0, 1, 1, 1, 0],
-]
+D5_BIT_MATRIX = (
+    (1, 1, 1, 1, 1),
+    (1, 0, 0, 0, 0),
+    (1, 0, 0, 0, 0),
+    (1, 1, 1, 1, 0),
+    (0, 0, 0, 0, 1),
+    (0, 0, 0, 0, 1),
+    (1, 1, 1, 1, 0),
+)
 
-D7_BIT_MATRIX = [
-    [1, 1, 1, 1, 1],
-    [0, 0, 0, 0, 1],
-    [0, 0, 0, 1, 0],
-    [0, 0, 1, 0, 0],
-    [0, 0, 1, 0, 0],
-    [0, 0, 1, 0, 0],
-    [0, 0, 1, 0, 0],
-]
+D6_BIT_MATRIX = (
+    (0, 1, 1, 1, 0),
+    (1, 0, 0, 0, 1),
+    (1, 0, 0, 0, 0),
+    (1, 1, 1, 1, 0),
+    (1, 0, 0, 0, 1),
+    (1, 0, 0, 0, 1),
+    (0, 1, 1, 1, 0),
+)
 
-D8_BIT_MATRIX = [
-    [0, 1, 1, 1, 0],
-    [1, 0, 0, 0, 1],
-    [1, 0, 0, 0, 1],
-    [0, 1, 1, 1, 0],
-    [1, 0, 0, 0, 1],
-    [1, 0, 0, 0, 1],
-    [0, 1, 1, 1, 0],
-]
+D7_BIT_MATRIX = (
+    (1, 1, 1, 1, 1),
+    (0, 0, 0, 0, 1),
+    (0, 0, 0, 1, 0),
+    (0, 0, 1, 0, 0),
+    (0, 0, 1, 0, 0),
+    (0, 0, 1, 0, 0),
+    (0, 0, 1, 0, 0),
+)
 
-D9_BIT_MATRIX = [
-    [0, 1, 1, 1, 0],
-    [1, 0, 0, 0, 1],
-    [1, 0, 0, 0, 1],
-    [0, 1, 1, 1, 1],
-    [0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 1],
-    [0, 1, 1, 1, 0],
-]
+D8_BIT_MATRIX = (
+    (0, 1, 1, 1, 0),
+    (1, 0, 0, 0, 1),
+    (1, 0, 0, 0, 1),
+    (0, 1, 1, 1, 0),
+    (1, 0, 0, 0, 1),
+    (1, 0, 0, 0, 1),
+    (0, 1, 1, 1, 0),
+)
 
-DIGIT_BIT_MATRICES = [
+D9_BIT_MATRIX = (
+    (0, 1, 1, 1, 0),
+    (1, 0, 0, 0, 1),
+    (1, 0, 0, 0, 1),
+    (0, 1, 1, 1, 1),
+    (0, 0, 0, 0, 1),
+    (1, 0, 0, 0, 1),
+    (0, 1, 1, 1, 0),
+)
+
+DIGIT_BIT_MATRICES = (
     D0_BIT_MATRIX,
     D1_BIT_MATRIX,
     D2_BIT_MATRIX,
@@ -155,22 +152,23 @@ DIGIT_BIT_MATRICES = [
     D7_BIT_MATRIX,
     D8_BIT_MATRIX,
     D9_BIT_MATRIX,
-]
+)
 
 
 class DigitsDisplay(Adw.Bin):
     __gtype_name__ = "DigitsDisplay"
-    digits_probs: list[float]
+
+    probabilities: list[float]
 
     def __init__(self, display_threshold=0.7):
         self.display_threshold = display_threshold
 
-        self.w_block = 35
-        self.h_block = 55
-        self.w_cell = self.w_block / 7
-        self.h_cell = self.h_block / 11
+        self.w_block, self.h_block = BLOCK_SIZE
+        self.w_cell = self.w_block / BLOCK_H_CELLS
+        self.h_cell = self.h_block / BLOCK_V_CELLS
         self.pixel_size = (self.w_cell * 0.8, self.h_cell * 0.8)
-        self.reset_digit_probs()
+
+        self.reset_probabilities()
 
         self.drawing_area = Gtk.DrawingArea(
             width_request=int(self.w_block * 10 + self.w_cell * 2),
@@ -184,78 +182,86 @@ class DigitsDisplay(Adw.Bin):
         manager.connect("notify::dark", self.on_dark)
         self.set_palette(manager.get_dark())
 
-    def reset_digit_probs(self):
-        self.digits_probs = [0.0] * 10
-
-    def set_display_threshold(self, display_threshold: float):
-        """Set the probability threshold for lighting a digit display."""
-
-        self.display_threshold = display_threshold
-        self.redraw()
-
     def on_dark(self, manager: Adw.StyleManager, _p):
         self.set_palette(manager.get_dark())
 
     def on_draw(
         self,
-        area: Gtk.DrawingArea,
+        _area: Gtk.DrawingArea,
         cr: cairo.Context,
-        width: int,
-        height: int,
+        _width: int,
+        _height: int,
     ):
         plt = self.palette
 
+        # draw a background
         cr.set_source_rgb(plt.bg_color.red, plt.bg_color.green, plt.bg_color.blue)
         cr.paint()
 
-        w_cell, h_cell = self.w_cell, self.h_cell
-
-        for d in range(10):
-            x_offset = d * self.w_block + w_cell
+        y_offset = self.h_cell * 2
+        for digit in range(10):
+            x_offset = digit * self.w_block + self.w_cell
             color = plt.off_pixel_color
 
-            d_prob = self.digits_probs[d]
-            if d_prob >= self.display_threshold:
+            d_probability = self.probabilities[digit]
+            if d_probability >= self.display_threshold:
                 color = plt.on_pixel_color
 
             # draw a digit
-            left = x_offset + w_cell
-            y = h_cell * 2
-            for row in DIGIT_BIT_MATRICES[d]:
+            left = x_offset + self.w_cell
+            y = y_offset
+            for row in DIGIT_BIT_MATRICES[digit]:
                 x = left
                 for pixel in row:
                     if pixel == 1:
                         draw_pixel(cr, x, y, self.pixel_size, color)
-                    x += w_cell
+                    x += self.w_cell
 
-                y += h_cell
+                y += self.h_cell
 
-            # draw probability bar
+            # draw a probability bar
             x = left
-            y += h_cell
+            y += self.h_cell
             for i in range(DIGIT_BIT_MATRIX_WIDTH):
                 color = plt.off_pixel_color
                 # not display for values under 0.1
-                if d_prob > 0.1 and (d_prob >= i / DIGIT_BIT_MATRIX_WIDTH):
+                if d_probability > 0.1 and (
+                    d_probability >= i / DIGIT_BIT_MATRIX_WIDTH
+                ):
                     color = plt.on_pixel_color
 
                 draw_pixel(cr, x, y, self.pixel_size, color)
-                x += w_cell
-
-    def set_palette(self, dark: bool):
-        self.palette = DEFAULT_DARK_PALETTE if dark else DEFAULT_LIGHT_PALETTE
-        self.redraw()
-
-    def set_probs(self, probs: list[float] | None):
-        if probs is None or len(probs) != 10:
-            self.reset_digit_probs()
-        else:
-            self.digits_probs = probs
-
-        self.redraw()
+                x += self.w_cell
 
     def redraw(self):
         self.drawing_area.queue_draw()
+
+    def set_display_threshold(self, display_threshold: float):
+        """Set the probability threshold for lighting a digit display"""
+
+        self.display_threshold = display_threshold
+        self.redraw()
+
+    def set_probabilities(self, probabilities: list[float] | None):
+        """Set the probabilities for each digit display"""
+
+        if probabilities is None or len(probabilities) != 10:
+            self.reset_probabilities()
+        else:
+            self.probabilities = probabilities
+
+        self.redraw()
+
+    def reset_probabilities(self):
+        """Reset the probabilities for each digit display to 0.0"""
+
+        self.probabilities = [0.0] * 10
+
+    def set_palette(self, dark: bool):
+        """Set the palette based on whether dark mode is enabled"""
+
+        self.palette = DEFAULT_DARK_PALETTE if dark else DEFAULT_LIGHT_PALETTE
+        self.redraw()
 
 
 def draw_pixel(

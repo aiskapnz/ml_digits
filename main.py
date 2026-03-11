@@ -213,7 +213,7 @@ class MainWindow(Adw.ApplicationWindow):
         if result is not None:
             preview_texture = new_preview_texture(result.preview_image)
             self.tf_preview_image.set_from_paintable(preview_texture)
-            self.tf_digits_display.set_probs(result.predicted_digits)
+            self.tf_digits_display.set_probabilities(result.predicted_digits)
 
             if result.predicted_digits is not None:
                 index, value = max(
